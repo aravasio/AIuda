@@ -150,7 +150,9 @@ export function analyze(
   }
 
   if (classification.flags.multimodal) {
-    notes.push("Multimodal repo: the language-model numbers below come from the nested text_config.");
+    notes.push(
+      "This repo handles more than text, so its architecture numbers come from the nested text_config rather than the top level.",
+    );
   }
   if (classification.flags.thirdParty && classification.baseModel !== null) {
     notes.push(

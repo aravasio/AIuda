@@ -15,6 +15,14 @@ export interface CatalogConfig {
   model: string;
   /** Upper bound on the JSON the model may produce, reserved before the card is trimmed. */
   responseTokenBudget: number;
+  /**
+   * Window to ask the runtime for, capped by what the model supports.
+   *
+   * Asked for explicitly because runtimes start far below what a model can do:
+   * ollama defaults to 4096 tokens for a model that supports 262144. Reading
+   * the model's own maximum instead would give a number the runtime ignores.
+   */
+  llmContextTokens: number;
   /** Assumed context for fit math when --context is not given. */
   defaultContextTokens: number;
   /**
@@ -33,6 +41,7 @@ export const DEFAULT_CONFIG: CatalogConfig = {
   runtimeEndpoint: "http://127.0.0.1:11434",
   model: "qwen3:8b",
   responseTokenBudget: 700,
+  llmContextTokens: 16384,
   defaultContextTokens: 8192,
   runtimeOverheadBytes: 1_000_000_000,
   maxSchemaRetries: 2,

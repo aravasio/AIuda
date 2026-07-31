@@ -15,6 +15,29 @@ export interface CommandHelp {
 
 export const COMMANDS: CommandHelp[] = [
   {
+    name: "query",
+    summary: "Explain what a model is for, and whether this machine runs it",
+    usage: "catalog query <url>",
+    details: [
+      "Takes a Hugging Face model page and answers, in plain words, what the model",
+      "takes in, what it gives back, what you would build with it, and what you",
+      "should not use it for. Then it tells you whether this machine can run it.",
+      "",
+      "The description is written by a language model running on your machine, from",
+      "the repository's own README. Every number \u2014 size, licence, memory, context",
+      "length \u2014 is read from the repository itself, never written by the language",
+      "model. Where the two disagree, the repository wins.",
+      "",
+      "The first look at a model needs the network. After that it is read from disk.",
+    ],
+    flags: [
+      { flag: "--technical", description: "Also show the architecture, the full benchmark table, and how the card was read." },
+      { flag: "--context <n>", description: "Assume n tokens of context when working out memory." },
+      { flag: "--json", description: "Print the result as JSON instead of text." },
+      { flag: "--refresh", description: "Read the model card again instead of using the saved answer." },
+    ],
+  },
+  {
     name: "fit",
     summary: "Work out whether this machine can run a model, and show the arithmetic",
     usage: "catalog fit <url>",
@@ -79,7 +102,7 @@ export function renderMainHelp(): string {
   lines.push(`    --refresh      Ignore anything saved and fetch the repo again.`);
   lines.push(`    --help         Show this, or the help for one command.`);
   lines.push("");
-  lines.push(`  ${style.dim("Example")}  catalog fit https://huggingface.co/Qwen/QwQ-32B`);
+  lines.push(`  ${style.dim("Example")}  catalog query https://huggingface.co/Qwen/QwQ-32B`);
   lines.push("");
   return lines.join("\n");
 }

@@ -4,6 +4,7 @@ import { colorSupported, setColorEnabled, style } from "../render/format.ts";
 import { nearestMatch, parseArgs } from "./args.ts";
 import { cacheCommand } from "./commands/cache.ts";
 import { fitCommand } from "./commands/fit.ts";
+import { queryCommand } from "./commands/query.ts";
 import { specsCommand } from "./commands/specs.ts";
 import { COMMANDS, findCommandHelp, renderCommandHelp, renderMainHelp } from "./help.ts";
 
@@ -34,6 +35,8 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   switch (parsed.command) {
+    case "query":
+      return await queryCommand(parsed.positionals, parsed.flags);
     case "fit":
       return await fitCommand(parsed.positionals, parsed.flags);
     case "specs":
