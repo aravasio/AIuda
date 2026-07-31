@@ -1,0 +1,7 @@
+{
+  "recordedAt": "2026-07-31T05:43:26.995Z",
+  "why": "gated repo, files unreadable without a token",
+  "repoId": "meta-llama/Llama-3.1-8B-Instruct",
+  "error": "meta-llama/Llama-3.1-8B-Instruct is gated. The owner requires you to accept their terms and use an access token before the files can be read.",
+  "name": "GatedRepoError"
+}

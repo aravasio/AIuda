@@ -1,0 +1,163 @@
+{
+  "recordedAt": "2026-07-31T05:43:26.847Z",
+  "why": "third-party quantisation, no config.json, many variants",
+  "ref": {
+    "repoId": "bartowski/Qwen2.5-7B-Instruct-GGUF",
+    "revision": null
+  },
+  "info": {
+    "repoId": "bartowski/Qwen2.5-7B-Instruct-GGUF",
+    "sha": "8911e8a47f92bac19d6f5c64a2e2095bd2f7d031",
+    "author": "bartowski",
+    "pipelineTag": "text-generation",
+    "libraryName": null,
+    "tags": [
+      "gguf",
+      "chat",
+      "text-generation",
+      "en",
+      "base_model:Qwen/Qwen2.5-7B-Instruct",
+      "base_model:quantized:Qwen/Qwen2.5-7B-Instruct",
+      "license:apache-2.0",
+      "endpoints_compatible",
+      "region:us",
+      "conversational"
+    ],
+    "downloads": 131268,
+    "likes": 71,
+    "lastModified": "2024-09-19T12:54:25.000Z",
+    "license": "apache-2.0",
+    "gated": false,
+    "baseModels": [
+      "Qwen/Qwen2.5-7B-Instruct"
+    ],
+    "safetensorsTotalParams": null,
+    "safetensorsParamsByDtype": {},
+    "modelIndex": [],
+    "cardData": {
+      "base_model": "Qwen/Qwen2.5-7B-Instruct",
+      "language": [
+        "en"
+      ],
+      "license": "apache-2.0",
+      "license_link": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/blob/main/LICENSE",
+      "pipeline_tag": "text-generation",
+      "tags": [
+        "chat"
+      ],
+      "quantized_by": "bartowski"
+    }
+  },
+  "files": [
+    {
+      "path": ".gitattributes",
+      "size": 3209
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-IQ2_M.gguf",
+      "size": 2780342976
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-IQ3_M.gguf",
+      "size": 3574012608
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-IQ3_XS.gguf",
+      "size": 3346256576
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-IQ4_XS.gguf",
+      "size": 4218473152
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q2_K.gguf",
+      "size": 3015940800
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q2_K_L.gguf",
+      "size": 3548164800
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q3_K_L.gguf",
+      "size": 4088459968
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q3_K_M.gguf",
+      "size": 3808391872
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q3_K_S.gguf",
+      "size": 3492369088
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q3_K_XL.gguf",
+      "size": 4565332672
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q4_0.gguf",
+      "size": 4444121792
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q4_0_4_4.gguf",
+      "size": 4431391424
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q4_0_4_8.gguf",
+      "size": 4431391424
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q4_0_8_8.gguf",
+      "size": 4431391424
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q4_K_L.gguf",
+      "size": 5087564480
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+      "size": 4683074240
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q4_K_S.gguf",
+      "size": 4457769664
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q5_K_L.gguf",
+      "size": 5781197504
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q5_K_M.gguf",
+      "size": 5444831936
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q5_K_S.gguf",
+      "size": 5315177152
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q6_K.gguf",
+      "size": 6254199488
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q6_K_L.gguf",
+      "size": 6518182592
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-Q8_0.gguf",
+      "size": 8098525888
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct-f16.gguf",
+      "size": 15237853600
+    },
+    {
+      "path": "Qwen2.5-7B-Instruct.imatrix",
+      "size": 4536678
+    },
+    {
+      "path": "README.md",
+      "size": 10166
+    }
+  ],
+  "card": "---\nbase_model: Qwen/Qwen2.5-7B-Instruct\nlanguage:\n- en\nlicense: apache-2.0\nlicense_link: https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/blob/main/LICENSE\npipeline_tag: text-generation\ntags:\n- chat\nquantized_by: bartowski\n---\n\n## Llamacpp imatrix Quantizations of Qwen2.5-7B-Instruct\n\nUsing <a href=\"https://github.com/ggerganov/llama.cpp/\">llama.cpp</a> release <a href=\"https://github.com/ggerganov/llama.cpp/releases/tag/b3772\">b3772</a> for quantization.\n\nOriginal model: https://huggingface.co/Qwen/Qwen2.5-7B-Instruct\n\nAll quants made using imatrix option with dataset from [here](https://gist.github.com/bartowski1182/eb213dccb3571f863da82e99418f81e8)\n\nRun them in [LM Studio](https://lmstudio.ai/)\n\n## Prompt format\n\n```\n<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n```\n\n## What's new:\n\nUpdate context length settings and tokenizer\n\n## Download a file (not the whole branch) from below:\n\n| Filename | Quant type | File Size | Split | Description |\n| -------- | ---------- | --------- | ----- | ----------- |\n| [Qwen2.5-7B-Instruct-f16.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-f16.gguf) | f16 | 15.24GB | false | Full F16 weights. |\n| [Qwen2.5-7B-Instruct-Q8_0.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q8_0.gguf) | Q8_0 | 8.10GB | false | Extremely high quality, generally unneeded but max available quant. |\n| [Qwen2.5-7B-Instruct-Q6_K_L.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q6_K_L.gguf) | Q6_K_L | 6.52GB | false | Uses Q8_0 for embed and output weights. Very high quality, near perfect, *recommended*. |\n| [Qwen2.5-7B-Instruct-Q6_K.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q6_K.gguf) | Q6_K | 6.25GB | false | Very high quality, near perfect, *recommended*. |\n| [Qwen2.5-7B-Instruct-Q5_K_L.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q5_K_L.gguf) | Q5_K_L | 5.78GB | false | Uses Q8_0 for embed and output weights. High quality, *recommended*. |\n| [Qwen2.5-7B-Instruct-Q5_K_M.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q5_K_M.gguf) | Q5_K_M | 5.44GB | false | High quality, *recommended*. |\n| [Qwen2.5-7B-Instruct-Q5_K_S.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q5_K_S.gguf) | Q5_K_S | 5.32GB | false | High quality, *recommended*. |\n| [Qwen2.5-7B-Instruct-Q4_K_L.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q4_K_L.gguf) | Q4_K_L | 5.09GB | false | Uses Q8_0 for embed and output weights. Good quality, *recommended*. |\n| [Qwen2.5-7B-Instruct-Q4_K_M.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf) | Q4_K_M | 4.68GB | false | Good quality, default size for must use cases, *recommended*. |\n| [Qwen2.5-7B-Instruct-Q3_K_XL.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q3_K_XL.gguf) | Q3_K_XL | 4.57GB | false | Uses Q8_0 for embed and output weights. Lower quality but usable, good for low RAM availability. |\n| [Qwen2.5-7B-Instruct-Q4_K_S.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q4_K_S.gguf) | Q4_K_S | 4.46GB | false | Slightly lower quality with more space savings, *recommended*. |\n| [Qwen2.5-7B-Instruct-Q4_0.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q4_0.gguf) | Q4_0 | 4.44GB | false | Legacy format, generally not worth using over similarly sized formats |\n| [Qwen2.5-7B-Instruct-Q4_0_8_8.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q4_0_8_8.gguf) | Q4_0_8_8 | 4.43GB | false | Optimized for ARM inference. Requires 'sve' support (see link below). |\n| [Qwen2.5-7B-Instruct-Q4_0_4_8.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q4_0_4_8.gguf) | Q4_0_4_8 | 4.43GB | false | Optimized for ARM inference. Requires 'i8mm' support (see link below). |\n| [Qwen2.5-7B-Instruct-Q4_0_4_4.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q4_0_4_4.gguf) | Q4_0_4_4 | 4.43GB | false | Optimized for ARM inference. Should work well on all ARM chips, pick this if you're unsure. |\n| [Qwen2.5-7B-Instruct-IQ4_XS.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-IQ4_XS.gguf) | IQ4_XS | 4.22GB | false | Decent quality, smaller than Q4_K_S with similar performance, *recommended*. |\n| [Qwen2.5-7B-Instruct-Q3_K_L.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q3_K_L.gguf) | Q3_K_L | 4.09GB | false | Lower quality but usable, good for low RAM availability. |\n| [Qwen2.5-7B-Instruct-Q3_K_M.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q3_K_M.gguf) | Q3_K_M | 3.81GB | false | Low quality. |\n| [Qwen2.5-7B-Instruct-IQ3_M.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-IQ3_M.gguf) | IQ3_M | 3.57GB | false | Medium-low quality, new method with decent performance comparable to Q3_K_M. |\n| [Qwen2.5-7B-Instruct-Q2_K_L.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q2_K_L.gguf) | Q2_K_L | 3.55GB | false | Uses Q8_0 for embed and output weights. Very low quality but surprisingly usable. |\n| [Qwen2.5-7B-Instruct-Q3_K_S.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q3_K_S.gguf) | Q3_K_S | 3.49GB | false | Low quality, not recommended. |\n| [Qwen2.5-7B-Instruct-IQ3_XS.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-IQ3_XS.gguf) | IQ3_XS | 3.35GB | false | Lower quality, new method with decent performance, slightly better than Q3_K_S. |\n| [Qwen2.5-7B-Instruct-Q2_K.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-Q2_K.gguf) | Q2_K | 3.02GB | false | Very low quality but surprisingly usable. |\n| [Qwen2.5-7B-Instruct-IQ2_M.gguf](https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/main/Qwen2.5-7B-Instruct-IQ2_M.gguf) | IQ2_M | 2.78GB | false | Relatively low quality, uses SOTA techniques to be surprisingly usable. |\n\n## Embed/output weights\n\nSome of these quants (Q3_K_XL, Q4_K_L etc) are the standard quantization method with the embeddings and output weights quantized to Q8_0 instead of what they would normally default to.\n\nSome say that this improves the quality, others don't notice any difference. If you use these models PLEASE COMMENT with your findings. I would like feedback that these are actually used and useful so I don't keep uploading quants no one is using.\n\nThanks!\n\n## Downloading using huggingface-cli\n\nFirst, make sure you have hugginface-cli installed:\n\n```\npip install -U \"huggingface_hub[cli]\"\n```\n\nThen, you can target the specific file you want:\n\n```\nhuggingface-cli download bartowski/Qwen2.5-7B-Instruct-GGUF --include \"Qwen2.5-7B-Instruct-Q4_K_M.gguf\" --local-dir ./\n```\n\nIf the model is bigger than 50GB, it will have been split into multiple files. In order to download them all to a local folder, run:\n\n```\nhuggingface-cli download bartowski/Qwen2.5-7B-Instruct-GGUF --include \"Qwen2.5-7B-Instruct-Q8_0/*\" --local-dir ./\n```\n\nYou can either specify a new local-dir (Qwen2.5-7B-Instruct-Q8_0) or download them all in place (./)\n\n## Q4_0_X_X\n\nThese are *NOT* for Metal (Apple) offloading, only ARM chips.\n\nIf you're using an ARM chip, the Q4_0_X_X quants will have a substantial speedup. Check out Q4_0_4_4 speed comparisons [on the original pull request](https://github.com/ggerganov/llama.cpp/pull/5780#pullrequestreview-21657544660)\n\nTo check which one would work best for your ARM chip, you can check [AArch64 SoC features](https://gpages.juszkiewicz.com.pl/arm-socs-table/arm-socs.html) (thanks EloyOn!).\n\n## Which file should I choose?\n\nA great write up with charts showing various performances is provided by Artefact2 [here](https://gist.github.com/Artefact2/b5f810600771265fc1e39442288e8ec9)\n\nThe first thing to figure out is how big a model you can run. To do this, you'll need to figure out how much RAM and/or VRAM you have.\n\nIf you want your model running as FAST as possible, you'll want to fit the whole thing on your GPU's VRAM. Aim for a quant with a file size 1-2GB smaller than your GPU's total VRAM.\n\nIf you want the absolute maximum quality, add both your system RAM and your GPU's VRAM together, then similarly grab a quant with a file size 1-2GB Smaller than that total.\n\nNext, you'll need to decide if you want to use an 'I-quant' or a 'K-quant'.\n\nIf you don't want to think too much, grab one of the K-quants. These are in format 'QX_K_X', like Q5_K_M.\n\nIf you want to get more into the weeds, you can check out this extremely useful feature chart:\n\n[llama.cpp feature matrix](https://github.com/ggerganov/llama.cpp/wiki/Feature-matrix)\n\nBut basically, if you're aiming for below Q4, and you're running cuBLAS (Nvidia) or rocBLAS (AMD), you should look towards the I-quants. These are in format IQX_X, like IQ3_M. These are newer and offer better performance for their size.\n\nThese I-quants can also be used on CPU and Apple Metal, but will be slower than their K-quant equivalent, so speed vs performance is a tradeoff you'll have to decide.\n\nThe I-quants are *not* compatible with Vulcan, which is also AMD, so if you have an AMD card double check if you're using the rocBLAS build or the Vulcan build. At the time of writing this, LM Studio has a preview with ROCm support, and other inference engines have specific builds for ROCm.\n\n## Credits\n\nThank you kalomaze and Dampf for assistance in creating the imatrix calibration dataset\n\nThank you ZeroWw for the inspiration to experiment with embed/output\n\nWant to support my work? Visit my ko-fi page here: https://ko-fi.com/bartowski\n",
+  "config": null
+}
