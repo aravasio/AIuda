@@ -48,6 +48,17 @@ export function crossCheck(prose: Prose, analysis: Analysis): CrossCheckResult {
     dropped.push({ field: "one_liner", claim: checked.one_liner, reason: licenceConflict });
   }
 
+  // Context length is one of the numbers the spec puts firmly on the structured
+  // side, alongside parameter counts and licence. A summary claiming a window
+  // the config does not support is the same class of error as a wrong size, and
+  // it is the number a reader is most likely to plan around.
+  for (const field of ["one_liner", "not_for"] as const) {
+    const conflict = contextConflict(checked[field], analysis);
+    if (conflict !== null) {
+      dropped.push({ field, claim: checked[field], reason: conflict });
+    }
+  }
+
   // `base` is a structural fact, not an opinion: a repo whose metadata and name
   // both say it is instruction-tuned is not a base model, whatever the card
   // reads like.
@@ -161,6 +172,30 @@ function numericConflict(text: string, analysis: Analysis): string | null {
     const matchesSomething = acceptable.some((actual) => withinRounding(claimed, actual));
     if (!matchesSomething) {
       return `the card summary said ${match[0]}, but the repository reports ${formatParams(analysis.params.total)}${analysis.params.active !== null && analysis.params.active !== analysis.params.total ? ` with ${formatParams(analysis.params.active)} active` : ""}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Looks for a context length in the prose that the config does not support.
+ * Written as "262k tokens", "128K context" or "1M token window".
+ */
+function contextConflict(text: string, analysis: Analysis): string | null {
+  const supported = analysis.architecture?.maxContext?.value ?? null;
+  if (supported === null) return null;
+
+  const matches = text.matchAll(/\b(\d+(?:\.\d+)?)\s*([KM])\b[- ]?(?=tokens?|context|window|\b)/gi);
+  for (const match of matches) {
+    const value = Number(match[1]);
+    const unit = match[2]?.toUpperCase();
+    if (!Number.isFinite(value) || unit === undefined) continue;
+    const claimed = unit === "K" ? value * 1024 : value * 1024 * 1024;
+
+    // Vendors write 262144 as "262k" and 131072 as "128k", so the rounding is
+    // generous in both directions.
+    if (Math.abs(claimed - supported) / supported > 0.15) {
+      return `the card summary said ${match[0].trim()}, but the configuration supports ${supported.toLocaleString("en-US")} tokens`;
     }
   }
   return null;

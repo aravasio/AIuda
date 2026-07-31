@@ -192,3 +192,40 @@ describe("the base model written without its owner", () => {
     expect(crossCheck(prose({ pairs_with: ["Qwen/Qwen2.5-32B"] }), dense).prose.pairs_with).toBeNull();
   });
 });
+
+describe("context length is structured data too", () => {
+  // Qwen3.6 supports 262,144 tokens; QwQ-32B supports 40,960.
+  it("accepts the vendor's own rounding of the real window", () => {
+    const said = prose({ one_liner: "Handles ultra-long texts up to 262k tokens for complex tasks." });
+    expect(crossCheck(said, moe).dropped).toHaveLength(0);
+  });
+
+  it("drops a window the configuration does not support", () => {
+    const said = prose({ one_liner: "Handles long documents with a 1M token context window." });
+    const result = crossCheck(said, moe);
+    expect(result.dropped.some((d) => d.reason.includes("262,144"))).toBe(true);
+  });
+
+  it("drops an understated window just as readily", () => {
+    const said = prose({ one_liner: "Reads up to 8K tokens of context at a time." });
+    expect(crossCheck(said, moe).dropped).toHaveLength(1);
+  });
+
+  it("checks it against the model's own maximum, not another model's", () => {
+    // 262k is right for Qwen3.6 and wrong for QwQ-32B.
+    const said = prose({ one_liner: "Handles up to 262k tokens of context in one go." });
+    expect(crossCheck(said, moe).dropped).toHaveLength(0);
+    expect(crossCheck(said, dense).dropped).toHaveLength(1);
+  });
+
+  it("says nothing when the repository publishes no maximum", () => {
+    const unknown: Analysis = { ...moe, architecture: null };
+    const said = prose({ one_liner: "Handles up to 262k tokens of context in one go." });
+    expect(crossCheck(said, unknown).dropped).toHaveLength(0);
+  });
+
+  it("does not mistake an ordinary number for a context length", () => {
+    const said = prose({ one_liner: "Answers questions across 11 languages and 3 domains." });
+    expect(crossCheck(said, moe).dropped).toHaveLength(0);
+  });
+});
