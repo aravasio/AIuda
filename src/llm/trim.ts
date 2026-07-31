@@ -145,11 +145,49 @@ export function stripTables(text: string): string {
  * before it ever sees them rather than argued with afterwards.
  */
 export function keepTables(sections: Section[]): Section[] {
-  return sections.filter((section) => {
-    const rows = section.body.split("\n").filter((line) => /^\s*\|.*\|/.test(line));
-    if (rows.length < 3) return false;
-    return numericCellShare(rows) >= MIN_NUMERIC_CELL_SHARE;
+  const kept: Section[] = [];
+  for (const section of sections) {
+    // Vendors write results as markdown tables or as raw HTML, interchangeably
+    // and often in the same card. Reading only markdown reported "no benchmarks"
+    // for a card whose scores were sitting in an HTML table.
+    const body = htmlTablesToRows(section.body);
+    const rows = body.split("\n").filter((line) => /^\s*\|.*\|/.test(line));
+    if (rows.length < 3) continue;
+    if (numericCellShare(rows) < MIN_NUMERIC_CELL_SHARE) continue;
+    kept.push({ ...section, body });
+  }
+  return kept;
+}
+
+/**
+ * Rewrites `<table>` markup into pipe rows, so one shape reaches the model and
+ * one shape is measured for numeric density.
+ */
+export function htmlTablesToRows(text: string): string {
+  return text.replace(/<table[\s\S]*?<\/table>/gi, (table) => {
+    const rows: string[] = [];
+    for (const match of table.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+      const row = match[1];
+      if (row === undefined) continue;
+      const cells: string[] = [];
+      for (const cell of row.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)) {
+        cells.push(stripMarkup(cell[1] ?? ""));
+      }
+      if (cells.length > 0) rows.push(`| ${cells.join(" | ")} |`);
+    }
+    return rows.length === 0 ? "" : `\n${rows.join("\n")}\n`;
   });
+}
+
+function stripMarkup(cell: string): string {
+  return cell
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** A results table is mostly numbers. A feature matrix is mostly words. */

@@ -107,26 +107,29 @@ export function buildProsePrompt(card: string, context: PromptContext): string {
   lines.push(card);
   lines.push("--- README ENDS ---");
   lines.push("");
-  lines.push(`Return exactly this JSON shape:
+  // The field rules are kept out of the JSON itself. When they were written as
+  // placeholder values inside the example object, a model reading a very long
+  // card copied one straight through as its answer, and it passed every check
+  // because a rule about a sentence is itself a well-formed sentence.
+  lines.push(`Return JSON with exactly these keys, filled in about the model above:
 
-{
-  "one_liner": "What goes in, what comes out, what you would build with it. ${MAX_ONE_LINER_WORDS} words maximum.",
-  "use_for": ["two to four concrete things someone would actually use this for"],
-  "not_for": "the most likely way someone would misuse this, and what to use instead",
-  "category": ["one or more of: ${CATEGORIES.join(", ")}"],
-  "deployment": {
-    "where": "local" | "hosted" | "either",
-    "reason": "one short sentence saying why"
-  },
-  "pairs_with": ["models this is designed to be used alongside"] or null,
-  "supersedes_note": "say plainly if the README indicates a newer version replaces this, or if it is mainly of research interest" or null
-}
+  one_liner        one sentence, at most ${MAX_ONE_LINER_WORDS} words, saying what goes in and
+                   what comes out
+  use_for          two to four short phrases
+  not_for          one phrase naming the most likely mistake, and what to use
+                   instead
+  category         a list, from: ${CATEGORIES.join(", ")}
+  deployment       an object with "where" set to local, hosted or either, and
+                   "reason" set to one short sentence
+  pairs_with       a list of model names, or null
+  supersedes_note  one sentence, or null
 
-Rules for category: use "base" only for a model with no instruction tuning that
-cannot hold a conversation, and when you use it, use it alone. Use "world-model"
-for a model that simulates an environment rather than answering questions.
+Use "base" only for a model with no instruction tuning that cannot hold a
+conversation, and when you use it, use it alone. Use "world-model" for a model
+that simulates an environment rather than answering questions.
 
-Set supersedes_note to null unless the README itself points to a newer version.`);
+Every value must describe the model in the README above. Do not copy any of the
+wording of these instructions into your answer.`);
 
   return lines.join("\n");
 }

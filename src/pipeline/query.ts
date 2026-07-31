@@ -14,6 +14,8 @@ export interface QueryResult {
   analysis: Analysis;
   prose: Prose;
   benchmarks: LabelledBenchmark[];
+  /** True when the card held tables that could not be read, so "none" would mislead. */
+  benchmarksUnreadable: boolean;
   /** Language-model claims thrown out because the repo's own data disagreed. */
   droppedClaims: DroppedClaim[];
   /** What the card looked like after trimming, for the technical view. */
@@ -110,9 +112,13 @@ export async function runQuery(input: {
   }
 
   // Pass 2: benchmark tables, as a separate call receiving only the tables.
-  const benchmarkTrim = tryTrimBenchmarks(cardSource.card, plan.cardBudgetTokens);
+  const { trimmed: benchmarkTrim, unreadable } = tryTrimBenchmarks(
+    cardSource.card,
+    plan.cardBudgetTokens,
+  );
   const cardBenchmarks: LabelledBenchmark[] = [];
   const rejectedRows: DroppedClaim[] = [];
+  if (unreadable !== null) notes.push(unreadable);
   if (benchmarkTrim !== null) {
     const extracted = await extractBenchmarks(runtime, {
       prompt: buildBenchmarkPrompt(benchmarkTrim.text, snapshot.info.repoId),
@@ -151,6 +157,7 @@ export async function runQuery(input: {
     analysis,
     prose: checked.prose,
     benchmarks: [...structured, ...cardBenchmarks],
+    benchmarksUnreadable: unreadable !== null,
     droppedClaims: [...checked.dropped, ...rejectedRows],
     trimming: {
       prose: {
@@ -185,13 +192,27 @@ function chooseCard(
 }
 
 /**
- * A card with no tables is the normal case, not a failure, so this returns null
- * rather than throwing. The prose pass is the one that must not be skipped.
+ * A card with no results tables is the normal case, not a failure, so this
+ * returns a result rather than throwing. But "there were none" and "there were
+ * some and they would not fit" must not collapse into the same answer: printing
+ * "none reported by the vendor" over a card full of scores is confidently wrong
+ * in exactly the way the tool exists to prevent.
  */
-function tryTrimBenchmarks(card: string, budgetTokens: number): TrimResult | null {
+function tryTrimBenchmarks(
+  card: string,
+  budgetTokens: number,
+): { trimmed: TrimResult | null; unreadable: string | null } {
   try {
-    return trimCard(card, { budgetTokens, pass: "benchmarks" });
-  } catch {
-    return null;
+    return { trimmed: trimCard(card, { budgetTokens, pass: "benchmarks" }), unreadable: null };
+  } catch (error) {
+    const hasTables = /^\s*\|.*\|/m.test(card) || /<table/i.test(card);
+    if (!hasTables) return { trimmed: null, unreadable: null };
+    return {
+      trimmed: null,
+      unreadable:
+        error instanceof Error && /no benchmark tables/i.test(error.message)
+          ? null
+          : "This card has benchmark tables, but they did not fit in the space the language model has, so none were read.",
+    };
   }
 }

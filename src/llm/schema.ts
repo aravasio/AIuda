@@ -135,6 +135,40 @@ export const BenchmarksSchema = z.object({
 export type ExtractedBenchmark = z.infer<typeof BenchmarkSchema>;
 
 /**
+ * Fragments that only appear in instructions about the answer, never in an
+ * answer. A model given a very long card will sometimes return the rule for a
+ * field instead of filling it in, and the result passes every other check: a
+ * sentence describing what a sentence should contain is a well-formed sentence
+ * of the right length with no jargon in it.
+ */
+const INSTRUCTION_FRAGMENTS = [
+  "what goes in",
+  "what comes out",
+  "words maximum",
+  "at most 25 words",
+  "one sentence",
+  "two to four",
+  "short phrases",
+  "or null",
+  "one or more of",
+  "the most likely mistake",
+  "what to use instead",
+  "concrete things",
+  "fill in",
+  "filled in",
+  "your answer",
+  "the readme above",
+  "the model above",
+] as const;
+
+/** True when the text reads as a rule about the field rather than its value. */
+export function looksLikeInstruction(text: string): boolean {
+  const value = text.toLowerCase();
+  if (value.includes("…") || value.includes("...")) return true;
+  return INSTRUCTION_FRAGMENTS.some((fragment) => value.includes(fragment));
+}
+
+/**
  * Language models capitalise list items like sentence openers. These are read
  * as a comma-separated run ("subtitle timing, karaoke, marking up datasets"),
  * where mid-list capitals look like a mistake.

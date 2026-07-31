@@ -43,7 +43,9 @@ export function renderQuery(
   lines.push(labelled("Your machine", verdictLine(result)));
   lines.push("");
 
-  lines.push(labelled("Benchmarks", benchmarkLine(result.benchmarks)));
+  lines.push(
+    labelled("Benchmarks", benchmarkLine(result.benchmarks, result.benchmarksUnreadable)),
+  );
 
   if (prose.supersedes_note !== null) {
     lines.push("");
@@ -100,8 +102,12 @@ function verdictLine(result: QueryResult): string {
  * the useful part; the numbers themselves belong behind --technical, where the
  * caveat about them sits too.
  */
-function benchmarkLine(benchmarks: LabelledBenchmark[]): string {
-  if (benchmarks.length === 0) return "none reported by the vendor";
+function benchmarkLine(benchmarks: LabelledBenchmark[], unreadable: boolean): string {
+  if (benchmarks.length === 0) {
+    return unreadable
+      ? "this card has some, but they did not fit and were not read"
+      : "none reported by the vendor";
+  }
 
   const fromIndex = benchmarks.filter((b) => b.source === "model-index").length;
   const fromCard = benchmarks.filter((b) => b.source === "card-table").length;

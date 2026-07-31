@@ -19,6 +19,7 @@ import type { GlobalFlags } from "../args.ts";
 interface CachedQuery {
   prose: QueryResult["prose"];
   benchmarks: QueryResult["benchmarks"];
+  benchmarksUnreadable: boolean;
   droppedClaims: QueryResult["droppedClaims"];
   model: string;
 }
@@ -54,6 +55,7 @@ export async function queryCommand(positionals: string[], flags: GlobalFlags): P
       analysis,
       prose: cached.prose,
       benchmarks: cached.benchmarks,
+      benchmarksUnreadable: cached.benchmarksUnreadable,
       droppedClaims: cached.droppedClaims,
       trimming: { prose: { tokens: 0, budgetTokens: 0, dropped: [] }, benchmarks: null },
       contextPlan: {
@@ -80,6 +82,7 @@ export async function queryCommand(positionals: string[], flags: GlobalFlags): P
     cache.set<CachedQuery>(analysis.sha, analysis.repoId, {
       prose: result.prose,
       benchmarks: result.benchmarks,
+      benchmarksUnreadable: result.benchmarksUnreadable,
       droppedClaims: result.droppedClaims,
       model: config.model,
     });

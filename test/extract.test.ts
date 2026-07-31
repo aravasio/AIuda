@@ -6,6 +6,7 @@ import { modelMaxContext, planContext } from "../src/llm/runtime.ts";
 import {
   BenchmarksSchema,
   findBannedTerms,
+  looksLikeInstruction,
   normaliseProse,
   ProseSchema,
   uncapitalise,
@@ -337,5 +338,51 @@ describe("answers about the prompt's example instead of the model", () => {
     const result = await extractProse(runtime, options, REASONING_CARD);
     expect(result.attempts).toHaveLength(2);
     expect(result.value.not_for).toContain("quick replies");
+  });
+});
+
+describe("answers that echo the instructions back", () => {
+  it("rejects the exact placeholder that reached a user", () => {
+    // The real Qwen3.6 reply. It passed every other rule: right length, no
+    // jargon, no ungrounded modality — because a sentence describing what a
+    // sentence should contain is itself a well-formed sentence.
+    const echoed = {
+      ...VALID,
+      one_liner: "What goes in, what comes out, what you would build with it. 25 words maximum.",
+    };
+    expect(proseChecks(echoed).join(" ")).toContain("repeats the instructions");
+  });
+
+  it.each([
+    "two to four concrete things someone would use this for",
+    "one sentence, or null",
+    "…",
+    "the most likely mistake, and what to use instead",
+  ])("rejects the echoed value %s", (text) => {
+    expect(looksLikeInstruction(text)).toBe(true);
+  });
+
+  it.each([
+    "Takes a question and returns step-by-step reasoning and a final answer.",
+    "subtitle timing",
+    "transcribing audio, use a speech-to-text model instead",
+  ])("accepts the real answer %s", (text) => {
+    expect(looksLikeInstruction(text)).toBe(false);
+  });
+
+  it("checks every prose field, not only the one-liner", () => {
+    const echoed = { ...VALID, use_for: ["two to four short phrases", "karaoke"] };
+    expect(proseChecks(echoed).join(" ")).toContain("use_for[0]");
+  });
+
+  it("retries an echo and accepts the corrected answer", async () => {
+    const echoed = JSON.stringify({
+      ...VALID,
+      one_liner: "What goes in, what comes out, what you would build with it. 25 words maximum.",
+    });
+    const runtime = new ScriptedRuntime([echoed, validJson]);
+    const result = await extractProse(runtime, options);
+    expect(result.attempts).toHaveLength(2);
+    expect(result.value.one_liner).toBe(VALID.one_liner);
   });
 });

@@ -4,6 +4,7 @@ import {
   estimateTokens,
   parseSections,
   Priority,
+  htmlTablesToRows,
   looksLikeScore,
   stripCodeBlocks,
   stripTables,
@@ -287,4 +288,35 @@ describe("telling a results table from every other kind", () => {
       expect(looksLikeScore(score)).toBe(false);
     },
   );
+});
+
+describe("benchmarks written as HTML rather than markdown", () => {
+  it("reads a vendor's HTML results table", () => {
+    // Qwen3.6 publishes its comparison as <table>. Reading only markdown
+    // reported "none reported by the vendor" over a card full of scores.
+    const card = loadSnapshot("moe-multimodal").card ?? "";
+    expect(card).toMatch(/<table/i);
+    expect(card.split("\n").filter((l) => /^\s*\|/.test(l))).toHaveLength(0);
+
+    const result = trimCard(card, { budgetTokens: 15000, pass: "benchmarks" });
+    expect(result.text).toContain("SWE-bench");
+    expect(result.text).toContain("Terminal-Bench");
+  });
+
+  it("turns HTML rows into pipe rows", () => {
+    const html = "<table><tr><th>Task</th><th>Score</th></tr><tr><td>MMLU</td><td>74.2</td></tr></table>";
+    expect(htmlTablesToRows(html)).toContain("| MMLU | 74.2 |");
+  });
+
+  it("still rejects an HTML table that is a feature matrix", () => {
+    const html = `## Checkpoints
+<table>
+<tr><th>Model</th><th>Languages</th><th>Mode</th></tr>
+<tr><td>A</td><td>Chinese, English</td><td>Offline</td></tr>
+<tr><td>B</td><td>French</td><td>Streaming</td></tr>
+</table>`;
+    expect(() => trimCard(html, { budgetTokens: 4000, pass: "benchmarks" })).toThrow(
+      CardTooLargeError,
+    );
+  });
 });

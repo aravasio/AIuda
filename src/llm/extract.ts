@@ -4,6 +4,7 @@ import type { GenerateRequest, LlmRuntime } from "./runtime.ts";
 import { BENCHMARK_SYSTEM_PROMPT, buildRetryNote, PROSE_SYSTEM_PROMPT } from "./prompts.ts";
 import {
   BenchmarksSchema,
+  looksLikeInstruction,
   ProseSchema,
   validateCategories,
   type Category,
@@ -160,6 +161,21 @@ export function proseChecks(value: Prose, card = ""): string[] {
   // does not do that.
   if (value.not_for.toLowerCase() === value.one_liner.toLowerCase()) {
     problems.push("not_for must name a misuse, not repeat one_liner");
+  }
+
+  // An echoed instruction reads as a real answer and passes every other rule,
+  // so it is caught by name.
+  for (const [field, text] of [
+    ["one_liner", value.one_liner],
+    ["not_for", value.not_for],
+    ["deployment.reason", value.deployment.reason],
+    ...value.use_for.map((entry, i) => [`use_for[${i}]`, entry] as const),
+  ] as Array<readonly [string, string]>) {
+    if (looksLikeInstruction(text)) {
+      problems.push(
+        `${field} repeats the instructions instead of describing the model. Write what this model actually does.`,
+      );
+    }
   }
 
   if (card !== "") {
