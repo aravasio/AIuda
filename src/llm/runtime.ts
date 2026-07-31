@@ -109,7 +109,15 @@ export class OllamaRuntime implements LlmRuntime {
       model: this.model,
       system: request.system,
       prompt: request.prompt,
-      stream: false,
+      // Streamed deliberately, even though the whole reply is wanted at once.
+      //
+      // Node's fetch gives up if response headers do not arrive within five
+      // minutes, and that limit is not reachable through AbortSignal. An
+      // unstreamed reply sends nothing until generation finishes, so any answer
+      // taking longer than five minutes failed on a runtime that was working
+      // perfectly. Streaming makes the headers arrive immediately and leaves
+      // the overall deadline to the signal below.
+      stream: true,
       format: "json",
       options: {
         // Asked for explicitly: ollama starts at a window far below what the
@@ -153,11 +161,26 @@ export class OllamaRuntime implements LlmRuntime {
       );
     }
 
-    const raw: unknown = await response.json();
-    if (!isRecord(raw) || typeof raw["response"] !== "string") {
-      throw new RuntimeUnavailableError("ollama returned something that was not a reply.");
+    try {
+      return await readStreamedReply(response);
+    } catch (cause) {
+      if (cause instanceof RuntimeUnavailableError) throw cause;
+      if (cause instanceof Error && cause.name === "TimeoutError") {
+        throw this.timeoutError();
+      }
+      throw new RuntimeUnavailableError(
+        `Lost contact with ollama at ${this.endpoint} part way through its reply.`,
+        "Check that it is still running, then try again:\n  ollama serve",
+      );
     }
-    return raw["response"];
+  }
+
+  private timeoutError(): RuntimeUnavailableError {
+    const minutes = Math.round(this.timeoutMs / 60_000);
+    return new RuntimeUnavailableError(
+      `${this.model} did not answer within ${minutes} minutes. On a machine without a graphics card the runtime has to read the whole model card before it writes anything, which can take a while.`,
+      `Give it longer by raising "requestTimeoutMs" in the config file, or use a smaller model:\n  CATALOG_MODEL=<a smaller model>`,
+    );
   }
 
   private async version(): Promise<string | null> {
@@ -188,6 +211,55 @@ export class OllamaRuntime implements LlmRuntime {
       return null;
     }
   }
+}
+
+/**
+ * Reassembles a streamed reply. ollama sends one JSON object per line, each
+ * carrying the next fragment, and a final object marking the end.
+ */
+export async function readStreamedReply(response: Response): Promise<string> {
+  if (response.body === null) {
+    throw new RuntimeUnavailableError("ollama returned an empty reply.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let reply = "";
+
+  const consume = (line: string): void => {
+    const text = line.trim();
+    if (text === "") return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // A partial line is normal at a chunk boundary; it is completed by the
+      // next read rather than treated as a failure.
+      return;
+    }
+    if (!isRecord(parsed)) return;
+    if (typeof parsed["error"] === "string") {
+      throw new RuntimeUnavailableError(`ollama reported: ${parsed["error"]}`);
+    }
+    if (typeof parsed["response"] === "string") reply += parsed["response"];
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    // The last piece may be half a line, so it stays in the buffer.
+    buffer = lines.pop() ?? "";
+    for (const line of lines) consume(line);
+  }
+  consume(buffer);
+
+  if (reply === "") {
+    throw new RuntimeUnavailableError("ollama produced an empty reply.");
+  }
+  return reply;
 }
 
 /**

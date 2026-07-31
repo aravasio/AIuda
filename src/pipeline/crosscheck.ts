@@ -66,11 +66,15 @@ export function crossCheck(prose: Prose, analysis: Analysis): CrossCheckResult {
   if (checked.pairs_with !== null) {
     const own = analysis.repoId.toLowerCase();
     const ownShort = analysis.repoId.split("/")[1]?.toLowerCase() ?? "";
-    const ancestors = new Set(
-      [analysis.classification.baseModel, ...(analysis.tags ?? [])]
-        .filter((v): v is string => typeof v === "string" && v.includes("/"))
-        .map((v) => v.toLowerCase()),
-    );
+    // Metadata names a base model with its owner ("Qwen/Qwen2.5-32B") but the
+    // summary usually writes it without ("Qwen2.5-32B"), so both forms count.
+    const ancestors = new Set<string>();
+    for (const declared of [analysis.classification.baseModel, ...(analysis.tags ?? [])]) {
+      if (typeof declared !== "string" || !declared.includes("/")) continue;
+      ancestors.add(declared.toLowerCase());
+      const short = declared.split("/")[1];
+      if (short !== undefined) ancestors.add(short.toLowerCase());
+    }
 
     const kept: string[] = [];
     for (const name of checked.pairs_with) {

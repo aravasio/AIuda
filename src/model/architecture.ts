@@ -124,14 +124,13 @@ export function parseArchitecture(config: Record<string, unknown> | null): Archi
     kvHeads,
     headDim,
     maxContext,
-    torchDtype:
-      typeof source["torch_dtype"] === "string"
-        ? source["torch_dtype"]
-        : typeof config["torch_dtype"] === "string"
-          ? config["torch_dtype"]
-          : typeof config["dtype"] === "string"
-            ? config["dtype"]
-            : null,
+    // Newer configs spell this "dtype"; older ones "torch_dtype". A nested
+    // sub-config wins, since that is where the language model's own weights are
+    // described on a multimodal repo.
+    torchDtype: firstString(
+      [source, config],
+      ["torch_dtype", "dtype"],
+    ),
     moe: parseMoe(config, nestedConfig),
     layerTypes: parseLayerTypes(config, nestedConfig),
     slidingWindow: pick(config, nestedConfig, ["sliding_window"])?.value ?? null,
@@ -140,6 +139,21 @@ export function parseArchitecture(config: Record<string, unknown> | null): Archi
     nested: nestedConfig !== null,
     missing,
   };
+}
+
+/** First string found for any of `keys`, searching each source in order. */
+function firstString(
+  sources: Array<Record<string, unknown> | null>,
+  keys: string[],
+): string | null {
+  for (const source of sources) {
+    if (source === null) continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === "string" && value !== "") return value;
+    }
+  }
+  return null;
 }
 
 function parseLayerTypes(

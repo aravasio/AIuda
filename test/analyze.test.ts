@@ -159,3 +159,17 @@ describe("surfacing a model that has been sitting still", () => {
     expect(analyze(recent, null, machine).notes.join(" ")).not.toContain("Last updated");
   });
 });
+
+describe("reading the weight precision", () => {
+  it.each(["standard-dense", "moe-multimodal", "world-model"] as const)(
+    "finds the precision for %s, wherever the config spells it",
+    (slug) => {
+      // Newer configs use "dtype" inside text_config; older ones "torch_dtype"
+      // at the top level. Missing it labelled the weights "safetensors", which
+      // names a file format where a reader expects a number of bits.
+      const analysis = analyze(loadSnapshot(slug), null, machine);
+      expect(analysis.architecture?.torchDtype).toBe("bfloat16");
+      expect(analysis.fits[0]?.variant?.quant).toBe("BF16");
+    },
+  );
+});

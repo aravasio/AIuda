@@ -178,3 +178,17 @@ describe("bugs the eval set exposed", () => {
     expect(result.prose.pairs_with).toEqual(["Qwen/Qwen3-ASR"]);
   });
 });
+
+describe("the base model written without its owner", () => {
+  it("drops Qwen2.5-32B even though metadata calls it Qwen/Qwen2.5-32B", () => {
+    // The real reply for QwQ-32B: the summary writes the short name, the
+    // repository declares the long one, and they must still match.
+    const result = crossCheck(prose({ pairs_with: ["Qwen-Chat", "Qwen2.5-32B"] }), dense);
+    expect(result.prose.pairs_with).toEqual(["Qwen-Chat"]);
+    expect(result.dropped.some((d) => d.claim === "Qwen2.5-32B")).toBe(true);
+  });
+
+  it("drops the long form too", () => {
+    expect(crossCheck(prose({ pairs_with: ["Qwen/Qwen2.5-32B"] }), dense).prose.pairs_with).toBeNull();
+  });
+});

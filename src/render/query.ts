@@ -88,8 +88,10 @@ function verdictLine(result: QueryResult): string {
   const total = fit.breakdown.totalBytes;
   if (total === null) return coloured;
 
-  const label = fit.variant?.label ?? fit.breakdown.weights?.quant ?? "";
-  const at = label === "" ? "" : ` at ${label}`;
+  // Only a real precision reads sensibly here. "70 GB at safetensors" names a
+  // file format where the reader expects a number of bits.
+  const label = fit.variant?.quant ?? fit.breakdown.weights?.quant ?? null;
+  const at = label === null ? "" : ` at ${label}`;
   return `${coloured}. ${humanBytes(total)}${at}, at ${result.analysis.contextTokens.toLocaleString("en-US")} tokens of context`;
 }
 
