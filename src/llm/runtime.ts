@@ -31,7 +31,14 @@ export interface LlmRuntime {
   status(): Promise<RuntimeStatus>;
   /** Throws RuntimeUnavailableError with an actionable fix when anything is missing. */
   requireReady(): Promise<RuntimeStatus>;
-  generate(request: GenerateRequest): Promise<string>;
+  generate(request: GenerateRequest): Promise<GeneratedReply>;
+}
+
+/** A reply, and whether the runtime stopped it because it ran out of room. */
+export interface GeneratedReply {
+  text: string;
+  /** True when the output limit cut the reply off rather than the model finishing. */
+  truncated: boolean;
 }
 
 /**
@@ -106,7 +113,7 @@ export class OllamaRuntime implements LlmRuntime {
     return status;
   }
 
-  async generate(request: GenerateRequest): Promise<string> {
+  async generate(request: GenerateRequest): Promise<GeneratedReply> {
     const body = {
       model: this.model,
       system: request.system,
@@ -195,12 +202,12 @@ export function postForStreamedText(
   url: string,
   body: unknown,
   timeoutMs: number,
-): Promise<string> {
+): Promise<GeneratedReply> {
   const target = new URL(url);
   const transport = target.protocol === "https:" ? https : http;
   const payload = JSON.stringify(body);
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<GeneratedReply>((resolve, reject) => {
     let settled = false;
     const finish = (fn: () => void): void => {
       if (settled) return;
@@ -245,6 +252,7 @@ export function postForStreamedText(
         response.setEncoding("utf8");
         let buffer = "";
         let reply = "";
+        let truncated = false;
         let failure: RuntimeUnavailableError | null = null;
 
         const consume = (line: string): void => {
@@ -264,6 +272,10 @@ export function postForStreamedText(
             return;
           }
           if (typeof parsed["response"] === "string") reply += parsed["response"];
+          // The runtime says why it stopped. "length" means the reply was cut
+          // off at the output limit, which is a different problem from a model
+          // that wrote something malformed.
+          if (parsed["done_reason"] === "length") truncated = true;
         };
 
         response.on("data", (chunk: string) => {
@@ -278,7 +290,7 @@ export function postForStreamedText(
           finish(() => {
             if (failure !== null) reject(failure);
             else if (reply === "") reject(new RuntimeUnavailableError("ollama produced an empty reply."));
-            else resolve(reply);
+            else resolve({ text: reply, truncated });
           });
         });
 

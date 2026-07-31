@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { InvalidLlmOutputError, RuntimeUnavailableError } from "../src/errors.ts";
+import { InvalidLlmOutputError, RuntimeUnavailableError, TruncatedReplyError } from "../src/errors.ts";
 import { extract, extractProse, proseChecks } from "../src/llm/extract.ts";
-import type { GenerateRequest, LlmRuntime, RuntimeStatus } from "../src/llm/runtime.ts";
+import type { GeneratedReply, GenerateRequest, LlmRuntime, RuntimeStatus } from "../src/llm/runtime.ts";
 import { modelMaxContext, planContext } from "../src/llm/runtime.ts";
 import {
   BenchmarksSchema,
@@ -13,6 +13,9 @@ import {
   validateCategories,
   type Prose,
 } from "../src/llm/schema.ts";
+
+/** Stands in for a reply the runtime cut off at the output limit. */
+const TRUNCATED_MARKER = "<<TRUNCATED>>";
 
 /** A runtime that replies with a fixed script, so retry behaviour is testable. */
 class ScriptedRuntime implements LlmRuntime {
@@ -33,11 +36,13 @@ class ScriptedRuntime implements LlmRuntime {
     return await this.status();
   }
 
-  async generate(request: GenerateRequest): Promise<string> {
+  async generate(request: GenerateRequest): Promise<GeneratedReply> {
     this.requests.push(request);
     const reply = this.replies.shift();
     if (reply === undefined) throw new Error("the script ran out of replies");
-    return reply;
+    // A scripted reply is complete unless the test marks it cut off.
+    if (reply === TRUNCATED_MARKER) return { text: "{\"benchmarks\": [{", truncated: true };
+    return { text: reply, truncated: false };
   }
 }
 
@@ -285,7 +290,7 @@ describe("a missing runtime", () => {
       async requireReady(): Promise<RuntimeStatus> {
         throw new RuntimeUnavailableError("nothing is listening", "ollama serve");
       },
-      async generate() {
+      async generate(): Promise<GeneratedReply> {
         throw new Error("should never be called");
       },
     };
@@ -433,5 +438,33 @@ describe("tidying hyphenated list items", () => {
 
   it("leaves a hyphenated model name alone", () => {
     expect(uncapitalise("Qwen3-ASR pairing")).toBe("Qwen3-ASR pairing");
+  });
+});
+
+describe("a reply the runtime cut off", () => {
+  it("is reported as cut off, not as malformed", async () => {
+    // The real Qwen3.6 failure: a 62-row comparison table produced hundreds of
+    // JSON entries and stopped mid-array. Calling that "the reply was not JSON"
+    // points at the model's writing when the fault is the room it was given.
+    const runtime = new ScriptedRuntime([TRUNCATED_MARKER]);
+    await expect(extractProse(runtime, options)).rejects.toBeInstanceOf(TruncatedReplyError);
+  });
+
+  it("names the setting that would fix it", async () => {
+    const runtime = new ScriptedRuntime([TRUNCATED_MARKER]);
+    try {
+      await extractProse(runtime, options);
+      expect.unreachable("should have thrown");
+    } catch (error) {
+      expect((error as TruncatedReplyError).message).toContain("cut off");
+      expect((error as TruncatedReplyError).fix).toContain("benchmarkTokenBudget");
+    }
+  });
+
+  it("does not waste retries on a limit that will be hit again", async () => {
+    const runtime = new ScriptedRuntime([TRUNCATED_MARKER, TRUNCATED_MARKER, TRUNCATED_MARKER]);
+    await expect(extractProse(runtime, options)).rejects.toThrow();
+    // Asking again with the same room gets the same cut-off reply.
+    expect(runtime.requests).toHaveLength(1);
   });
 });

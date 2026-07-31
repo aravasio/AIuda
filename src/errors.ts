@@ -87,6 +87,17 @@ export class CardTooLargeError extends CatalogError {
   }
 }
 
+/**
+ * The runtime stopped writing because it hit the output limit. Distinct from
+ * malformed output: the model was writing correctly and was cut off.
+ */
+export class TruncatedReplyError extends CatalogError {
+  constructor(message: string, fix: string | null = null) {
+    super(message, ExitCode.InvalidLlmOutput, fix);
+    this.name = "TruncatedReplyError";
+  }
+}
+
 export class InvalidLlmOutputError extends CatalogError {
   constructor(message: string, fix: string | null = null) {
     super(message, ExitCode.InvalidLlmOutput, fix);

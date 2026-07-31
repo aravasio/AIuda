@@ -1,5 +1,5 @@
 import type { CatalogConfig } from "../config.ts";
-import { CardTooLargeError } from "../errors.ts";
+import { CardTooLargeError, InvalidLlmOutputError, TruncatedReplyError } from "../errors.ts";
 import type { RepoSnapshot } from "../hf/types.ts";
 import { extractBenchmarks, extractProse } from "../llm/extract.ts";
 import { buildBenchmarkPrompt, buildProsePrompt, PROSE_SYSTEM_PROMPT, type PromptContext } from "../llm/prompts.ts";
@@ -119,25 +119,40 @@ export async function runQuery(input: {
   const cardBenchmarks: LabelledBenchmark[] = [];
   const rejectedRows: DroppedClaim[] = [];
   if (unreadable !== null) notes.push(unreadable);
+  let benchmarksCutOff = false;
   if (benchmarkTrim !== null) {
-    const extracted = await extractBenchmarks(runtime, {
-      prompt: buildBenchmarkPrompt(benchmarkTrim.text, snapshot.info.repoId),
-      contextTokens: plan.windowTokens,
-      maxOutputTokens: config.responseTokenBudget,
-      maxRetries: config.maxSchemaRetries,
-    });
-    // A row whose score is not a number is not a benchmark, whatever the model
-    // called it. Dropped by rule rather than retried: the deterministic side
-    // can tell a score from a language name, and asking again would not help.
-    for (const entry of extracted.value.benchmarks) {
-      if (looksLikeScore(entry.score)) {
-        cardBenchmarks.push({ ...entry, source: "card-table" });
+    try {
+      const extracted = await extractBenchmarks(runtime, {
+        prompt: buildBenchmarkPrompt(benchmarkTrim.text, snapshot.info.repoId),
+        contextTokens: plan.windowTokens,
+        maxOutputTokens: config.benchmarkTokenBudget,
+        maxRetries: config.maxSchemaRetries,
+      });
+      // A row whose score is not a number is not a benchmark, whatever the model
+      // called it. Dropped by rule rather than retried: the deterministic side
+      // can tell a score from a language name, and asking again would not help.
+      for (const entry of extracted.value.benchmarks) {
+        if (looksLikeScore(entry.score)) {
+          cardBenchmarks.push({ ...entry, source: "card-table" });
+        } else {
+          rejectedRows.push({
+            field: "benchmarks",
+            claim: `${entry.benchmark}: ${entry.score}`,
+            reason: "that is not a score, so it is not a benchmark result",
+          });
+        }
+      }
+    } catch (error) {
+      // The description is the product; the benchmark table is not. A card
+      // whose results are too long to read should still get an explanation,
+      // with the benchmarks honestly reported as unread rather than as absent.
+      if (error instanceof TruncatedReplyError || error instanceof InvalidLlmOutputError) {
+        benchmarksCutOff = true;
+        notes.push(
+          `This card's benchmark table was too large to read in full, so no scores were taken from it. The description above is unaffected. Raise "benchmarkTokenBudget" in the config file to read more of it.`,
+        );
       } else {
-        rejectedRows.push({
-          field: "benchmarks",
-          claim: `${entry.benchmark}: ${entry.score}`,
-          reason: "that is not a score, so it is not a benchmark result",
-        });
+        throw error;
       }
     }
   }
@@ -157,7 +172,7 @@ export async function runQuery(input: {
     analysis,
     prose: checked.prose,
     benchmarks: [...structured, ...cardBenchmarks],
-    benchmarksUnreadable: unreadable !== null,
+    benchmarksUnreadable: unreadable !== null || benchmarksCutOff,
     droppedClaims: [...checked.dropped, ...rejectedRows],
     trimming: {
       prose: {

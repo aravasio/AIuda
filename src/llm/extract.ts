@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { InvalidLlmOutputError } from "../errors.ts";
+import { InvalidLlmOutputError, TruncatedReplyError } from "../errors.ts";
 import type { GenerateRequest, LlmRuntime } from "./runtime.ts";
 import {
   BENCHMARK_SYSTEM_PROMPT,
@@ -16,6 +16,9 @@ import {
   type ExtractedBenchmark,
   type Prose,
 } from "./schema.ts";
+
+/** Recorded on the attempt so callers can tell a cut-off reply from a bad one. */
+export const TRUNCATED_PROBLEM = "the reply was cut off before it finished";
 
 export interface ExtractionAttempt {
   attempt: number;
@@ -58,7 +61,18 @@ export async function extract<T>(
       contextTokens: options.contextTokens,
       maxOutputTokens: options.maxOutputTokens,
     };
-    const raw = await runtime.generate(request);
+    const { text: raw, truncated } = await runtime.generate(request);
+
+    // A cut-off reply is not a malformed one. Reporting it as "the reply was
+    // not JSON" sends the reader looking for a fault in the model's writing
+    // when the real fault is that it was given too little room to finish.
+    if (truncated) {
+      attempts.push({ attempt, problems: [TRUNCATED_PROBLEM], raw });
+      throw new TruncatedReplyError(
+        `The reply was cut off after ${options.maxOutputTokens} tokens, before it was finished.`,
+        `Raise the room it has to answer in: "responseTokenBudget" for the description, or "benchmarkTokenBudget" for benchmark tables, in the config file.`,
+      );
+    }
 
     const parsed = parseJson(raw);
     if (parsed.problems.length > 0) {

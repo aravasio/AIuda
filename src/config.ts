@@ -16,6 +16,14 @@ export interface CatalogConfig {
   /** Upper bound on the JSON the model may produce, reserved before the card is trimmed. */
   responseTokenBudget: number;
   /**
+   * Room for the benchmark reply, which is a list rather than a paragraph.
+   *
+   * A vendor comparison table with five columns and a dozen rows becomes sixty
+   * JSON entries, so this is several times the prose allowance. Too small and
+   * the reply is cut off mid-list.
+   */
+  benchmarkTokenBudget: number;
+  /**
    * Window to ask the runtime for, capped by what the model supports.
    *
    * Asked for explicitly because runtimes start far below what a model can do:
@@ -49,6 +57,7 @@ export const DEFAULT_CONFIG: CatalogConfig = {
   runtimeEndpoint: "http://127.0.0.1:11434",
   model: "qwen3:8b",
   responseTokenBudget: 700,
+  benchmarkTokenBudget: 3000,
   llmContextTokens: 16384,
   defaultContextTokens: 8192,
   runtimeOverheadBytes: 1_000_000_000,
