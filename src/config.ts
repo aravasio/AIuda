@@ -33,6 +33,14 @@ export interface CatalogConfig {
   runtimeOverheadBytes: number;
   /** How many times a malformed response is retried before the run fails. */
   maxSchemaRetries: number;
+  /**
+   * How long a single call to the runtime may take.
+   *
+   * Sized for the slow case rather than the fast one: on a machine without a
+   * GPU the runtime has to load the model from disk and then read the whole
+   * prompt before it writes anything, which takes minutes. A timeout tuned for
+   * GPU speeds turns a working setup into an intermittent failure.
+   */
   requestTimeoutMs: number;
 }
 
@@ -45,7 +53,7 @@ export const DEFAULT_CONFIG: CatalogConfig = {
   defaultContextTokens: 8192,
   runtimeOverheadBytes: 1_000_000_000,
   maxSchemaRetries: 2,
-  requestTimeoutMs: 300_000,
+  requestTimeoutMs: 1_200_000,
 };
 
 export function configPath(): string {

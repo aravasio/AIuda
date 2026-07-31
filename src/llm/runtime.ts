@@ -130,10 +130,19 @@ export class OllamaRuntime implements LlmRuntime {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-    } catch {
+    } catch (cause) {
+      // Running out of time and losing the connection look the same from here
+      // but need different fixes, so they are reported differently.
+      if (cause instanceof Error && cause.name === "TimeoutError") {
+        const minutes = Math.round(this.timeoutMs / 60_000);
+        throw new RuntimeUnavailableError(
+          `${this.model} did not answer within ${minutes} minutes. On a machine without a graphics card the runtime has to read the whole model card before it writes anything, which can take a while.`,
+          `Give it longer by raising "requestTimeoutMs" in the config file, or use a smaller model:\n  CATALOG_MODEL=<a smaller model>`,
+        );
+      }
       throw new RuntimeUnavailableError(
         `Lost contact with ollama at ${this.endpoint} while it was working.`,
-        "Check that it is still running, then try again.",
+        "Check that it is still running, then try again:\n  ollama serve",
       );
     }
 
