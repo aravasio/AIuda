@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RUNTIME_OVERHEAD_BYTES } from "../src/fit/math.ts";
-import { analyze } from "../src/pipeline/analyze.ts";
+import { analyze, __testing } from "../src/pipeline/analyze.ts";
 import { fakeMachine, loadSnapshot } from "./helpers/fixtures.ts";
 
 const machine = fakeMachine();
@@ -131,5 +131,31 @@ describe("the deterministic pass, end to end", () => {
     const first = analyze(loadSnapshot("moe-multimodal"), null, machine);
     const second = analyze(loadSnapshot("moe-multimodal"), null, machine);
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+  });
+});
+
+describe("surfacing a model that has been sitting still", () => {
+  it("says how old a long-untouched repo is, from metadata rather than the summary", () => {
+    // QwQ-32B: heavily downloaded, last touched March 2025.
+    const analysis = analyze(loadSnapshot("standard-dense"), null, machine);
+    expect(analysis.lastModified?.startsWith("2025-03")).toBe(true);
+    expect(analysis.notes.join(" ")).toMatch(/Last updated .* months ago|over \d+ years ago/);
+    expect(analysis.notes.join(" ")).toContain("check whether something newer");
+  });
+
+  it("counts the months between two dates", () => {
+    expect(__testing.monthsSince("2025-03-11T00:00:00.000Z", new Date("2026-07-31T00:00:00.000Z"))).toBe(16);
+    expect(__testing.monthsSince("2026-07-01T00:00:00.000Z", new Date("2026-07-31T00:00:00.000Z"))).toBe(0);
+    expect(__testing.monthsSince(null)).toBeNull();
+    expect(__testing.monthsSince("not a date")).toBeNull();
+  });
+
+  it("says nothing about the age of a freshly updated repo", () => {
+    const fresh = loadSnapshot("standard-dense");
+    const recent = {
+      ...fresh,
+      info: { ...fresh.info, lastModified: new Date().toISOString() },
+    };
+    expect(analyze(recent, null, machine).notes.join(" ")).not.toContain("Last updated");
   });
 });

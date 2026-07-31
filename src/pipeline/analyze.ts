@@ -149,6 +149,16 @@ export function analyze(
     );
   }
 
+  // Whether a newer model exists is not knowable from one repo, but its age is,
+  // and it is read straight from metadata. A model still heavily downloaded
+  // years after its last update is the case this is here to surface.
+  const age = monthsSince(snapshot.info.lastModified);
+  if (age !== null && age >= STALE_AFTER_MONTHS) {
+    notes.push(
+      `Last updated ${describeAge(age)}, in ${formatMonth(snapshot.info.lastModified as string)}. This field moves quickly, so check whether something newer has replaced it before committing to it.`,
+    );
+  }
+
   if (classification.flags.multimodal) {
     notes.push(
       "This repo handles more than text, so its architecture numbers come from the nested text_config rather than the top level.",
@@ -265,3 +275,27 @@ function buildFit(
 function billions(params: number): string {
   return formatParams(params);
 }
+
+/** How long a repo can sit untouched before its age is worth mentioning. */
+const STALE_AFTER_MONTHS = 12;
+
+function monthsSince(timestamp: string | null, now: Date = new Date()): number | null {
+  if (timestamp === null) return null;
+  const then = new Date(timestamp);
+  if (Number.isNaN(then.getTime())) return null;
+  const months =
+    (now.getFullYear() - then.getFullYear()) * 12 + (now.getMonth() - then.getMonth());
+  return months < 0 ? 0 : months;
+}
+
+function describeAge(months: number): string {
+  if (months < 24) return `${months} months ago`;
+  const years = Math.floor(months / 12);
+  return `over ${years} years ago`;
+}
+
+function formatMonth(timestamp: string): string {
+  return new Date(timestamp).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+export const __testing = { monthsSince, describeAge, STALE_AFTER_MONTHS };

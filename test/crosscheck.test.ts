@@ -136,3 +136,45 @@ describe("what the cross-check leaves alone", () => {
     expect(JSON.stringify(input)).toBe(before);
   });
 });
+
+describe("bugs the eval set exposed", () => {
+  it("drops a supersedes_note that only says the model has not been replaced", () => {
+    // The real reply for QwQ-32B, which reads like information and carries none.
+    const result = crossCheck(
+      prose({ supersedes_note: "This model is part of the Qwen series and is not a newer version of itself" }),
+      dense,
+    );
+    expect(result.prose.supersedes_note).toBeNull();
+    expect(result.dropped.some((d) => d.field === "supersedes_note")).toBe(true);
+  });
+
+  it.each([
+    "This is the current version of the model",
+    "It has not been superseded",
+    "QwQ-32B is the latest release in its family",
+  ])("drops the vacuous note %s", (note) => {
+    expect(crossCheck(prose({ supersedes_note: note }), dense).prose.supersedes_note).toBeNull();
+  });
+
+  it("keeps a note that names an actual replacement", () => {
+    const note = "There is a newer version, Qwen/Qwen3-32B, which the README points to.";
+    expect(crossCheck(prose({ supersedes_note: note }), dense).prose.supersedes_note).toBe(note);
+  });
+
+  it("keeps a note saying the model is mainly of research interest", () => {
+    const note = "Mainly of research interest; for practical use prefer a newer instruction-tuned model.";
+    expect(crossCheck(prose({ supersedes_note: note }), dense).prose.supersedes_note).toBe(note);
+  });
+
+  it("drops the base model listed as something to run alongside", () => {
+    // QwQ-32B was built from Qwen2.5-32B. That is its ancestor, not its companion.
+    const result = crossCheck(prose({ pairs_with: ["Qwen/Qwen2.5-32B"] }), dense);
+    expect(result.prose.pairs_with).toBeNull();
+    expect(result.dropped.some((d) => d.reason.includes("built from"))).toBe(true);
+  });
+
+  it("keeps a genuine companion model", () => {
+    const result = crossCheck(prose({ pairs_with: ["Qwen/Qwen3-ASR"] }), dense);
+    expect(result.prose.pairs_with).toEqual(["Qwen/Qwen3-ASR"]);
+  });
+});

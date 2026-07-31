@@ -61,21 +61,78 @@ export function crossCheck(prose: Prose, analysis: Analysis): CrossCheckResult {
     if (checked.category.length === 0) checked.category = ["chat"];
   }
 
-  // A model cannot pair with itself.
+  // A model cannot pair with itself, and the model it was built from is its
+  // ancestor rather than its companion. Both are declared in metadata.
   if (checked.pairs_with !== null) {
-    const own = analysis.repoId.split("/")[1]?.toLowerCase() ?? "";
-    const filtered = checked.pairs_with.filter((name) => name.toLowerCase() !== own);
-    if (filtered.length !== checked.pairs_with.length) {
-      dropped.push({
-        field: "pairs_with",
-        claim: analysis.repoId,
-        reason: "a model cannot be paired with itself",
-      });
+    const own = analysis.repoId.toLowerCase();
+    const ownShort = analysis.repoId.split("/")[1]?.toLowerCase() ?? "";
+    const ancestors = new Set(
+      [analysis.classification.baseModel, ...(analysis.tags ?? [])]
+        .filter((v): v is string => typeof v === "string" && v.includes("/"))
+        .map((v) => v.toLowerCase()),
+    );
+
+    const kept: string[] = [];
+    for (const name of checked.pairs_with) {
+      const lower = name.toLowerCase();
+      if (lower === own || lower === ownShort) {
+        dropped.push({
+          field: "pairs_with",
+          claim: name,
+          reason: "a model cannot be paired with itself",
+        });
+        continue;
+      }
+      if (ancestors.has(lower)) {
+        dropped.push({
+          field: "pairs_with",
+          claim: name,
+          reason: `${name} is the model this one was built from, which is not the same as something to run alongside it`,
+        });
+        continue;
+      }
+      kept.push(name);
     }
-    checked.pairs_with = filtered.length === 0 ? null : filtered;
+    checked.pairs_with = kept.length === 0 ? null : kept;
+  }
+
+  // A note saying the model has not been replaced is not a supersession note.
+  // It reads as information while carrying none, which is worse than silence.
+  if (checked.supersedes_note !== null && isVacuousSupersedesNote(checked.supersedes_note, analysis)) {
+    dropped.push({
+      field: "supersedes_note",
+      claim: checked.supersedes_note,
+      reason: "it does not name a newer model or say the model is of research interest",
+    });
+    checked.supersedes_note = null;
   }
 
   return { prose: checked, dropped };
+}
+
+/**
+ * A useful note names a replacement or says the model is mainly of research
+ * interest. Anything else — "this is the current version", "part of the Qwen
+ * series", "is not a newer version of itself" — says nothing.
+ */
+function isVacuousSupersedesNote(note: string, analysis: Analysis): boolean {
+  const text = note.toLowerCase();
+
+  if (/research (interest|purposes|use)|mainly of interest|prefer\s+\S/i.test(text)) return false;
+
+  // A denial is never a supersession note, however it is phrased.
+  if (/\b(not|no|isn'?t|hasn'?t been|never)\b.*\b(newer|replaced|superseded|deprecated|outdated)\b/.test(text)) {
+    return true;
+  }
+  if (/\b(current|latest|most recent|up to date)\b/.test(text) && !/\bnewer\b/.test(text)) {
+    return true;
+  }
+
+  // Otherwise it must point at something other than this model.
+  const ownShort = (analysis.repoId.split("/")[1] ?? "").toLowerCase();
+  const mentioned = note.match(/\b[A-Z][A-Za-z0-9.]*(?:[-/][A-Za-z0-9.]+)+\b/g) ?? [];
+  const others = mentioned.filter((name) => !name.toLowerCase().includes(ownShort));
+  return others.length === 0;
 }
 
 /**

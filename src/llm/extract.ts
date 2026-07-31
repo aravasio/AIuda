@@ -129,8 +129,29 @@ function parseJson(raw: string): ParsedJson {
   return { value: null, problems: ["the reply was not JSON"] };
 }
 
-/** Rules the schema cannot express on its own. */
-export function proseChecks(value: Prose): string[] {
+/**
+ * Words that name what a model works on. A reply that talks about one the card
+ * never mentions is describing something else.
+ */
+const MODALITY_CONCEPTS: Array<{ concept: string; stems: string[] }> = [
+  { concept: "audio", stems: ["audio", "speech", "voice", "transcri", "acoustic", "asr", "spoken"] },
+  { concept: "images", stems: ["image", "photo", "picture", "visual", "vision", "ocr"] },
+  { concept: "video", stems: ["video", "frame", "clip", "footage"] },
+  { concept: "music", stems: ["music", "song", "melody", "instrument"] },
+  { concept: "alignment", stems: ["align"] },
+  { concept: "embeddings", stems: ["embed", "vector", "retriev", "rerank"] },
+  { concept: "speakers", stems: ["speaker", "diariz"] },
+];
+
+/**
+ * Rules the schema cannot express on its own.
+ *
+ * `card` is the trimmed text the model was given. It is used to check that the
+ * reply is about the model in front of it: a small model shown a worked example
+ * will sometimes answer about the example instead, producing a fluent answer
+ * for entirely the wrong model.
+ */
+export function proseChecks(value: Prose, card = ""): string[] {
   const problems: string[] = [];
   const categoryProblem = validateCategories(value.category as Category[]);
   if (categoryProblem !== null) problems.push(categoryProblem);
@@ -140,18 +161,37 @@ export function proseChecks(value: Prose): string[] {
   if (value.not_for.toLowerCase() === value.one_liner.toLowerCase()) {
     problems.push("not_for must name a misuse, not repeat one_liner");
   }
+
+  if (card !== "") {
+    const haystack = card.toLowerCase();
+    for (const field of ["one_liner", "not_for"] as const) {
+      const text = value[field].toLowerCase();
+      for (const { concept, stems } of MODALITY_CONCEPTS) {
+        const claimed = stems.some((stem) => text.includes(stem));
+        // Any word from the same family counts: a card saying "transcript"
+        // supports a reply saying "transcribing".
+        const supported = stems.some((stem) => haystack.includes(stem));
+        if (claimed && !supported) {
+          problems.push(
+            `${field} talks about ${concept}, which this model's README never mentions. Describe the model in the README, not the example.`,
+          );
+          break;
+        }
+      }
+    }
+  }
+
   return problems;
 }
 
 export async function extractProse(
   runtime: LlmRuntime,
   options: Omit<ExtractOptions, "system">,
+  /** The trimmed card, so the reply can be checked for talking about something else. */
+  card = "",
 ): Promise<ExtractionResult<Prose>> {
-  return await extract(
-    runtime,
-    ProseSchema,
-    { ...options, system: PROSE_SYSTEM_PROMPT },
-    proseChecks,
+  return await extract(runtime, ProseSchema, { ...options, system: PROSE_SYSTEM_PROMPT }, (value) =>
+    proseChecks(value, card),
   );
 }
 

@@ -37,23 +37,47 @@ WRITE FOR A NEWCOMER
   "token classification" describes the architecture and tells a reader nothing
   about what the model is for.
 
-Good one_liner:
-  "Takes an audio file and its written transcript, returns the exact second each
-   word is spoken."
-Bad one_liner:
-  "Non-autoregressive token classification model for forced alignment across 11
-   languages."
+THE EXAMPLES BELOW ARE ABOUT A DIFFERENT MODEL
+They show the shape of a good answer. They are not facts about the model you
+are describing. Never copy their words into your reply. If your answer mentions
+anything from an example that the README does not talk about, it is wrong.
 
-The good one says what goes in and what comes out. The bad one describes how it
-was built.
+Example of the right shape, for an unrelated model that aligns audio:
+  one_liner: "Takes an audio file and its written transcript, returns the exact
+              second each word is spoken."
+Example of the wrong shape, for that same unrelated model:
+  one_liner: "Non-autoregressive token classification model for forced alignment
+              across 11 languages."
+
+The right one says what goes in and what comes out. The wrong one describes how
+the model was built.
 
 not_for MATTERS MOST
-not_for is what stops someone downloading the wrong thing. If there is an
-obvious model people confuse this with, name it. Be specific: not "not for
-everything else" but "not for transcribing audio, you need a separate speech
-recognition model for that".
+not_for is what stops someone downloading the wrong thing, so it has to be about
+THIS model. Name the thing people would most plausibly reach for this model to
+do, that it cannot do, and say what to use instead. A not_for that has nothing
+to do with what the README describes is worse than useless.
+
+supersedes_note
+Set it to null unless the README itself says a newer version exists, or says the
+model is mainly of research interest. Do not write a note saying the model is
+current, is part of a series, or has not been replaced. If there is nothing to
+say, the value is null.
 
 Reply with JSON only. No explanation around it, no markdown fences.`;
+
+/**
+ * Phrases from the prompt's own examples. A reply containing one is describing
+ * the example rather than the model, which produces an answer that reads
+ * perfectly and is about something else entirely.
+ */
+export const EXAMPLE_PHRASES = [
+  "the exact second each word is spoken",
+  "written transcript",
+  "forced alignment",
+  "transcribing audio",
+  "speech recognition model for that",
+] as const;
 
 export function buildProsePrompt(card: string, context: PromptContext): string {
   const lines: string[] = [];

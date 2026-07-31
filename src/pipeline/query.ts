@@ -92,12 +92,16 @@ export async function runQuery(input: {
     );
   }
 
-  const prose = await extractProse(runtime, {
-    prompt: buildProsePrompt(trimmedProse.text, context),
-    contextTokens: plan.windowTokens,
-    maxOutputTokens: config.responseTokenBudget,
-    maxRetries: config.maxSchemaRetries,
-  });
+  const prose = await extractProse(
+    runtime,
+    {
+      prompt: buildProsePrompt(trimmedProse.text, context),
+      contextTokens: plan.windowTokens,
+      maxOutputTokens: config.responseTokenBudget,
+      maxRetries: config.maxSchemaRetries,
+    },
+    trimmedProse.text,
+  );
 
   if (prose.attempts.length > 1) {
     notes.push(

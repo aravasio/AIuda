@@ -291,3 +291,51 @@ describe("a missing runtime", () => {
     await expect(dead.requireReady()).rejects.toBeInstanceOf(RuntimeUnavailableError);
   });
 });
+
+describe("answers about the prompt's example instead of the model", () => {
+  const REASONING_CARD = "QwQ is the reasoning model of the Qwen series. It thinks before answering hard maths and coding problems.";
+  const AUDIO_CARD = "This model takes an audio file and its transcript and returns word-level alignment for speech.";
+
+  it("rejects the audio not_for that leaked out of the worked example", () => {
+    // The real failure: QwQ-32B, a reasoning model, was given the example's
+    // not_for verbatim. It reads perfectly and is about a different model.
+    const leaked = {
+      ...VALID,
+      one_liner: "Takes a question, returns step-by-step reasoning and a final answer.",
+      not_for: "transcribing audio, you need a separate speech recognition model for that",
+      category: ["reasoning" as const],
+    };
+    const problems = proseChecks(leaked, REASONING_CARD);
+    expect(problems.join(" ")).toContain("README never mentions");
+  });
+
+  it("allows the same sentence when the card really is about audio", () => {
+    const grounded = {
+      ...VALID,
+      not_for: "transcribing audio, you need a separate speech recognition model for that",
+    };
+    expect(proseChecks(grounded, AUDIO_CARD)).toEqual([]);
+  });
+
+  it("says nothing when there is no card to check against", () => {
+    expect(proseChecks(VALID)).toEqual([]);
+  });
+
+  it("retries a leaked answer and accepts the corrected one", async () => {
+    const leaked = JSON.stringify({
+      ...VALID,
+      one_liner: "Takes a question, returns step-by-step reasoning and a final answer.",
+      not_for: "transcribing audio, you need a separate speech recognition model for that",
+    });
+    const corrected = JSON.stringify({
+      ...VALID,
+      one_liner: "Takes a question, returns step-by-step reasoning and a final answer.",
+      not_for: "quick replies, it works through problems at length before answering",
+      category: ["reasoning"],
+    });
+    const runtime = new ScriptedRuntime([leaked, corrected]);
+    const result = await extractProse(runtime, options, REASONING_CARD);
+    expect(result.attempts).toHaveLength(2);
+    expect(result.value.not_for).toContain("quick replies");
+  });
+});
