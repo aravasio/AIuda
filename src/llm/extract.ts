@@ -1,7 +1,12 @@
 import type { z } from "zod";
 import { InvalidLlmOutputError } from "../errors.ts";
 import type { GenerateRequest, LlmRuntime } from "./runtime.ts";
-import { BENCHMARK_SYSTEM_PROMPT, buildRetryNote, PROSE_SYSTEM_PROMPT } from "./prompts.ts";
+import {
+  BENCHMARK_SYSTEM_PROMPT,
+  buildRetryNote,
+  EXAMPLE_PHRASES,
+  PROSE_SYSTEM_PROMPT,
+} from "./prompts.ts";
 import {
   BenchmarksSchema,
   looksLikeInstruction,
@@ -180,19 +185,43 @@ export function proseChecks(value: Prose, card = ""): string[] {
 
   if (card !== "") {
     const haystack = card.toLowerCase();
-    for (const field of ["one_liner", "not_for"] as const) {
-      const text = value[field].toLowerCase();
-      for (const { concept, stems } of MODALITY_CONCEPTS) {
-        const claimed = stems.some((stem) => text.includes(stem));
-        // Any word from the same family counts: a card saying "transcript"
-        // supports a reply saying "transcribing".
-        const supported = stems.some((stem) => haystack.includes(stem));
-        if (claimed && !supported) {
-          problems.push(
-            `${field} talks about ${concept}, which this model's README never mentions. Describe the model in the README, not the example.`,
-          );
-          break;
-        }
+
+    // Only one_liner is held to this. It states what the model *does*, so a
+    // modality the README never mentions means it is describing something else.
+    const summary = value.one_liner.toLowerCase();
+    for (const { concept, stems } of MODALITY_CONCEPTS) {
+      const claimed = stems.some((stem) => summary.includes(stem));
+      // Any word from the same family counts: a card saying "transcript"
+      // supports a reply saying "transcribing".
+      const supported = stems.some((stem) => haystack.includes(stem));
+      if (claimed && !supported) {
+        problems.push(
+          `one_liner talks about ${concept}, which this model's README never mentions. Describe the model in the README, not the example.`,
+        );
+        break;
+      }
+    }
+
+    // not_for is the opposite case: it names what the model cannot do, so
+    // pointing at a capability the README never mentions is exactly right.
+    // "Not for generating images" is a fair warning on a text model. What is
+    // not fair is the worked example's own sentence appearing on a card with
+    // nothing to do with it, so only that is rejected.
+    const warning = value.not_for.toLowerCase();
+    for (const phrase of EXAMPLE_PHRASES) {
+      if (!warning.includes(phrase.toLowerCase())) continue;
+      // The example's wording is only wrong when the card has nothing to do
+      // with what it is about. On a card that really does align audio, the same
+      // sentence is the correct warning.
+      const touched = MODALITY_CONCEPTS.filter(({ stems }) =>
+        stems.some((stem) => phrase.toLowerCase().includes(stem)),
+      );
+      const supported = touched.some(({ stems }) => stems.some((stem) => haystack.includes(stem)));
+      if (!supported) {
+        problems.push(
+          `not_for repeats the worked example word for word, and this README says nothing about it. Name a mistake someone would plausibly make with this model.`,
+        );
+        break;
       }
     }
   }

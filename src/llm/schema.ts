@@ -179,7 +179,9 @@ export function looksLikeInstruction(text: string): boolean {
 export function uncapitalise(text: string): string {
   const [first, ...rest] = text.split(" ");
   if (first === undefined) return text;
-  if (!/^[A-Z][a-z]+$/.test(first)) return text;
+  // Hyphenated openers count too: "Real-time analysis" reads as badly
+  // mid-list as "Batch timestamping" does.
+  if (!/^[A-Z][a-z]+(-[a-z]+)*$/.test(first)) return text;
   return [first.toLowerCase(), ...rest].join(" ");
 }
 

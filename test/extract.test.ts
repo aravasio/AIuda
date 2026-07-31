@@ -307,7 +307,7 @@ describe("answers about the prompt's example instead of the model", () => {
       category: ["reasoning" as const],
     };
     const problems = proseChecks(leaked, REASONING_CARD);
-    expect(problems.join(" ")).toContain("README never mentions");
+    expect(problems.join(" ")).toContain("worked example");
   });
 
   it("allows the same sentence when the card really is about audio", () => {
@@ -384,5 +384,54 @@ describe("answers that echo the instructions back", () => {
     const result = await extractProse(runtime, options);
     expect(result.attempts).toHaveLength(2);
     expect(result.value.one_liner).toBe(VALID.one_liner);
+  });
+});
+
+describe("not_for names what the model cannot do", () => {
+  const REASONING_CARD = "QwQ is the reasoning model of the Qwen series. It thinks before answering hard maths and coding problems.";
+
+  it("allows a warning about a capability the README never mentions", () => {
+    // This is the point of not_for. Rejecting it failed QwQ-32B outright,
+    // three retries and no answer at all.
+    const warned = {
+      ...VALID,
+      one_liner: "Takes a question, returns step-by-step reasoning and a final answer.",
+      not_for: "generating images; use an image model for that",
+      category: ["reasoning" as const],
+    };
+    expect(proseChecks(warned, REASONING_CARD)).toEqual([]);
+  });
+
+  it.each([
+    "creating videos from a prompt; use a video model",
+    "producing music; use a music model instead",
+    "embedding documents for search; use an embedding model",
+  ])("allows the warning %s on a text model", (not_for) => {
+    const warned = { ...VALID, one_liner: "Takes a question, returns a reasoned answer.", not_for };
+    expect(proseChecks(warned, REASONING_CARD)).toEqual([]);
+  });
+
+  it("still rejects the worked example's own sentence on an unrelated card", () => {
+    const leaked = {
+      ...VALID,
+      one_liner: "Takes a question, returns step-by-step reasoning and a final answer.",
+      not_for: "transcribing audio, you need a separate speech recognition model for that",
+    };
+    expect(proseChecks(leaked, REASONING_CARD).join(" ")).toContain("worked example");
+  });
+
+  it("still rejects a one_liner about a modality the card never mentions", () => {
+    const wrong = { ...VALID, one_liner: "Takes an audio file and returns word timings." };
+    expect(proseChecks(wrong, REASONING_CARD).join(" ")).toContain("one_liner talks about audio");
+  });
+});
+
+describe("tidying hyphenated list items", () => {
+  it("lowers a hyphenated opener", () => {
+    expect(uncapitalise("Real-time speech analysis")).toBe("real-time speech analysis");
+  });
+
+  it("leaves a hyphenated model name alone", () => {
+    expect(uncapitalise("Qwen3-ASR pairing")).toBe("Qwen3-ASR pairing");
   });
 });
