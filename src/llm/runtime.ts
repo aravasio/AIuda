@@ -1,3 +1,5 @@
+import http from "node:http";
+import https from "node:https";
 import { RuntimeUnavailableError } from "../errors.ts";
 import { isRecord } from "../hf/client.ts";
 import type { CatalogConfig } from "../config.ts";
@@ -109,14 +111,8 @@ export class OllamaRuntime implements LlmRuntime {
       model: this.model,
       system: request.system,
       prompt: request.prompt,
-      // Streamed deliberately, even though the whole reply is wanted at once.
-      //
-      // Node's fetch gives up if response headers do not arrive within five
-      // minutes, and that limit is not reachable through AbortSignal. An
-      // unstreamed reply sends nothing until generation finishes, so any answer
-      // taking longer than five minutes failed on a runtime that was working
-      // perfectly. Streaming makes the headers arrive immediately and leaves
-      // the overall deadline to the signal below.
+      // Streamed so the reply arrives as it is written rather than in one
+      // block at the end.
       stream: true,
       format: "json",
       options: {
@@ -130,46 +126,22 @@ export class OllamaRuntime implements LlmRuntime {
       think: false,
     };
 
-    let response: Response;
+    // Deliberately not fetch.
+    //
+    // Node's fetch abandons a request when response headers do not arrive
+    // within five minutes, and that limit cannot be raised through AbortSignal
+    // or any option fetch accepts. Streaming was not enough on its own: ollama
+    // sends no headers at all until it has finished loading the model, so a
+    // cold start on a slow machine still hit the limit and reported a working
+    // runtime as unreachable. node:http imposes no such deadline, which leaves
+    // the configured timeout as the only one.
     try {
-      response = await this.fetchImpl(`${this.endpoint}/api/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
-    } catch (cause) {
-      // Running out of time and losing the connection look the same from here
-      // but need different fixes, so they are reported differently.
-      if (cause instanceof Error && cause.name === "TimeoutError") {
-        const minutes = Math.round(this.timeoutMs / 60_000);
-        throw new RuntimeUnavailableError(
-          `${this.model} did not answer within ${minutes} minutes. On a machine without a graphics card the runtime has to read the whole model card before it writes anything, which can take a while.`,
-          `Give it longer by raising "requestTimeoutMs" in the config file, or use a smaller model:\n  CATALOG_MODEL=<a smaller model>`,
-        );
-      }
-      throw new RuntimeUnavailableError(
-        `Lost contact with ollama at ${this.endpoint} while it was working.`,
-        "Check that it is still running, then try again:\n  ollama serve",
-      );
-    }
-
-    if (!response.ok) {
-      throw new RuntimeUnavailableError(
-        `ollama replied ${response.status} when asked to run ${this.model}.`,
-        `Check the model is usable with:\n  ollama run ${this.model} "hello"`,
-      );
-    }
-
-    try {
-      return await readStreamedReply(response);
+      return await postForStreamedText(`${this.endpoint}/api/generate`, body, this.timeoutMs);
     } catch (cause) {
       if (cause instanceof RuntimeUnavailableError) throw cause;
-      if (cause instanceof Error && cause.name === "TimeoutError") {
-        throw this.timeoutError();
-      }
+      if (cause instanceof Error && cause.name === "TimeoutError") throw this.timeoutError();
       throw new RuntimeUnavailableError(
-        `Lost contact with ollama at ${this.endpoint} part way through its reply.`,
+        `Lost contact with ollama at ${this.endpoint} while it was working.`,
         "Check that it is still running, then try again:\n  ollama serve",
       );
     }
@@ -214,52 +186,110 @@ export class OllamaRuntime implements LlmRuntime {
 }
 
 /**
- * Reassembles a streamed reply. ollama sends one JSON object per line, each
- * carrying the next fragment, and a final object marking the end.
+ * Posts JSON and reassembles a newline-delimited streamed reply.
+ *
+ * ollama sends one JSON object per line, each carrying the next fragment. The
+ * only deadline is `timeoutMs`, measured across the whole exchange.
  */
-export async function readStreamedReply(response: Response): Promise<string> {
-  if (response.body === null) {
-    throw new RuntimeUnavailableError("ollama returned an empty reply.");
-  }
+export function postForStreamedText(
+  url: string,
+  body: unknown,
+  timeoutMs: number,
+): Promise<string> {
+  const target = new URL(url);
+  const transport = target.protocol === "https:" ? https : http;
+  const payload = JSON.stringify(body);
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let reply = "";
+  return new Promise<string>((resolve, reject) => {
+    let settled = false;
+    const finish = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
 
-  const consume = (line: string): void => {
-    const text = line.trim();
-    if (text === "") return;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // A partial line is normal at a chunk boundary; it is completed by the
-      // next read rather than treated as a failure.
-      return;
-    }
-    if (!isRecord(parsed)) return;
-    if (typeof parsed["error"] === "string") {
-      throw new RuntimeUnavailableError(`ollama reported: ${parsed["error"]}`);
-    }
-    if (typeof parsed["response"] === "string") reply += parsed["response"];
-  };
+    const timer = setTimeout(() => {
+      const error = new Error("timed out");
+      error.name = "TimeoutError";
+      finish(() => {
+        request.destroy();
+        reject(error);
+      });
+    }, timeoutMs);
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    // The last piece may be half a line, so it stays in the buffer.
-    buffer = lines.pop() ?? "";
-    for (const line of lines) consume(line);
-  }
-  consume(buffer);
+    const request = transport.request(
+      target,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+      },
+      (response) => {
+        const status = response.statusCode ?? 0;
+        if (status < 200 || status >= 300) {
+          response.resume();
+          finish(() =>
+            reject(
+              new RuntimeUnavailableError(
+                `ollama replied ${status} when asked to generate.`,
+                `Check the model is usable with:\n  ollama run <model> "hello"`,
+              ),
+            ),
+          );
+          return;
+        }
 
-  if (reply === "") {
-    throw new RuntimeUnavailableError("ollama produced an empty reply.");
-  }
-  return reply;
+        response.setEncoding("utf8");
+        let buffer = "";
+        let reply = "";
+        let failure: RuntimeUnavailableError | null = null;
+
+        const consume = (line: string): void => {
+          const text = line.trim();
+          if (text === "") return;
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            // A partial line at a chunk boundary is normal; the next chunk
+            // completes it.
+            return;
+          }
+          if (!isRecord(parsed)) return;
+          if (typeof parsed["error"] === "string") {
+            failure = new RuntimeUnavailableError(`ollama reported: ${parsed["error"]}`);
+            return;
+          }
+          if (typeof parsed["response"] === "string") reply += parsed["response"];
+        };
+
+        response.on("data", (chunk: string) => {
+          buffer += chunk;
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) consume(line);
+        });
+
+        response.on("end", () => {
+          consume(buffer);
+          finish(() => {
+            if (failure !== null) reject(failure);
+            else if (reply === "") reject(new RuntimeUnavailableError("ollama produced an empty reply."));
+            else resolve(reply);
+          });
+        });
+
+        response.on("error", (cause: Error) => finish(() => reject(cause)));
+      },
+    );
+
+    request.on("error", (cause: Error) => finish(() => reject(cause)));
+    request.write(payload);
+    request.end();
+  });
 }
 
 /**
