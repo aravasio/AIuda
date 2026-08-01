@@ -7,10 +7,25 @@ import { join } from "node:path";
  * may assume a size or a hardware class: swapping in a smaller model has to be
  * a one-line config change.
  */
+/**
+ * Where the model that writes the prose runs.
+ *
+ * "ollama" keeps the model card on this machine. "openrouter" posts it to a
+ * third party, which is a choice about privacy as much as about speed, so it is
+ * only ever used when it has been asked for by name.
+ */
+export type RuntimeName = "ollama" | "openrouter";
+
 export interface CatalogConfig {
-  /** Runtime that hosts the model. Only ollama is implemented; the shape allows others. */
-  runtime: "ollama";
+  /** Runtime that hosts the model. */
+  runtime: RuntimeName;
   runtimeEndpoint: string;
+  /**
+   * Credential for a runtime that needs one. Read from the environment only,
+   * never from the config file: a key in a file is a key that gets committed,
+   * pasted into a bug report, or read by anything else running as this user.
+   */
+  apiKey: string | null;
   /** Model tag as the runtime knows it. */
   model: string;
   /** Upper bound on the JSON the model may produce, reserved before the card is trimmed. */
@@ -52,10 +67,23 @@ export interface CatalogConfig {
   requestTimeoutMs: number;
 }
 
+/** Where each runtime lives when the config file does not say. */
+export const DEFAULT_ENDPOINTS: Record<RuntimeName, string> = {
+  ollama: "http://127.0.0.1:11434",
+  openrouter: "https://openrouter.ai/api/v1",
+};
+
+/** The model each runtime uses when the config file does not say. */
+export const DEFAULT_MODELS: Record<RuntimeName, string> = {
+  ollama: "qwen3:8b",
+  openrouter: "deepseek/deepseek-v4-flash-0731",
+};
+
 export const DEFAULT_CONFIG: CatalogConfig = {
   runtime: "ollama",
-  runtimeEndpoint: "http://127.0.0.1:11434",
-  model: "qwen3:8b",
+  runtimeEndpoint: DEFAULT_ENDPOINTS.ollama,
+  apiKey: null,
+  model: DEFAULT_MODELS.ollama,
   responseTokenBudget: 700,
   benchmarkTokenBudget: 3000,
   llmContextTokens: 16384,
@@ -74,27 +102,62 @@ export function configPath(): string {
 }
 
 /** File first, then environment, then the defaults. */
-export function loadConfig(path: string = configPath()): CatalogConfig {
+export function loadConfig(
+  path: string = configPath(),
+  env: NodeJS.ProcessEnv = process.env,
+): CatalogConfig {
   let config: CatalogConfig = { ...DEFAULT_CONFIG };
+  /** Settings the user named themselves, which the runtime's defaults must not overwrite. */
+  const named = new Set<string>();
 
   if (existsSync(path)) {
     try {
       const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
       if (typeof parsed === "object" && parsed !== null) {
-        config = { ...config, ...(parsed as Partial<CatalogConfig>) };
+        const fromFile = parsed as Partial<CatalogConfig>;
+        // A key in the file cannot set the credential, whatever it is called.
+        delete fromFile.apiKey;
+        for (const key of Object.keys(fromFile)) named.add(key);
+        config = { ...config, ...fromFile };
       }
     } catch {
       // A broken config file falls back to defaults rather than blocking the run.
     }
   }
 
-  const envModel = process.env["CATALOG_MODEL"];
-  if (envModel !== undefined && envModel !== "") config.model = envModel;
+  const envRuntime = env["CATALOG_RUNTIME"];
+  if (envRuntime !== undefined && envRuntime !== "") {
+    // Validated where the runtime is built, so an unknown name reaches the user
+    // as the name they typed rather than as a silent fall back to ollama.
+    config.runtime = envRuntime as RuntimeName;
+    named.add("runtime");
+  }
 
-  const envEndpoint = process.env["CATALOG_RUNTIME_ENDPOINT"] ?? process.env["OLLAMA_HOST"];
+  const envModel = env["CATALOG_MODEL"];
+  if (envModel !== undefined && envModel !== "") {
+    config.model = envModel;
+    named.add("model");
+  }
+
+  // OLLAMA_HOST is ollama's own variable and says nothing about anywhere else,
+  // so it only applies when ollama is the runtime.
+  const envEndpoint =
+    env["CATALOG_RUNTIME_ENDPOINT"] ?? (config.runtime === "ollama" ? env["OLLAMA_HOST"] : undefined);
   if (envEndpoint !== undefined && envEndpoint !== "") {
     config.runtimeEndpoint = envEndpoint.startsWith("http") ? envEndpoint : `http://${envEndpoint}`;
+    named.add("runtimeEndpoint");
   }
+
+  // The defaults in DEFAULT_CONFIG are ollama's. Switching runtime without
+  // saying where it lives or which model to use has to move both, or the tool
+  // would ask openrouter for a model named "qwen3:8b" at a local address.
+  if (config.runtime in DEFAULT_ENDPOINTS) {
+    if (!named.has("runtimeEndpoint")) config.runtimeEndpoint = DEFAULT_ENDPOINTS[config.runtime];
+    if (!named.has("model")) config.model = DEFAULT_MODELS[config.runtime];
+  }
+
+  const key = env["OPENROUTER_API_KEY"] ?? env["CATALOG_API_KEY"];
+  if (key !== undefined && key.trim() !== "") config.apiKey = key.trim();
 
   return config;
 }

@@ -67,10 +67,42 @@ model cards in place, and a name-keyed cache would pin the first answer forever.
 A new commit is a new key, so an edited card is reprocessed automatically with no
 staleness check anywhere.
 
+## Where the prose is written
+
+`catalog query` needs a language model to write the description with. There are
+two places it can run, and the choice is about privacy before it is about speed.
+
+**On this machine, through ollama.** The default. The model card never leaves the
+machine.
+
+```
+ollama pull qwen3:8b
+```
+
+**Over the network, through OpenRouter.** Nothing to install and nothing to fit
+in VRAM, but the model card is posted to a third party and to whichever provider
+they route it to.
+
+```
+export OPENROUTER_API_KEY=sk-or-...
+CATALOG_RUNTIME=openrouter catalog query <url>
+```
+
+The key is read from the environment only, never from the config file: a key in
+a file is a key that gets committed or pasted into a bug report. Switching
+runtime moves the endpoint and the default model with it, so naming the runtime
+is enough. `CATALOG_MODEL` overrides the model either way, and a name OpenRouter
+does not serve is reported before the card is sent, not after.
+
+The rule about numbers does not change with the runtime. Whichever model writes
+the prose, it writes prose only, and every claim is still checked against the
+repo's own data before it is printed.
+
 ## Configuration
 
 `~/.config/catalog/config.json` holds the settings, including which language
-model to use. Nothing in the code assumes a model size or a hardware class.
+model to use and which runtime serves it. Nothing in the code assumes a model
+size or a hardware class.
 
 `~/.config/catalog/machine.json` overrides anything the hardware probe reads
 wrongly. Its keys match the field names in `catalog specs --json`. No probe ever

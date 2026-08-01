@@ -3,7 +3,7 @@ import { loadConfig } from "../../config.ts";
 import { UsageError } from "../../errors.ts";
 import { HfClient } from "../../hf/client.ts";
 import { parseModelRef } from "../../hf/url.ts";
-import { OllamaRuntime } from "../../llm/runtime.ts";
+import { createRuntime } from "../../llm/runtime.ts";
 import { analyze } from "../../pipeline/analyze.ts";
 import { runQuery, type QueryResult } from "../../pipeline/query.ts";
 import { resolveRepo } from "../../pipeline/resolve.ts";
@@ -22,6 +22,8 @@ interface CachedQuery {
   benchmarksUnreadable: boolean;
   droppedClaims: QueryResult["droppedClaims"];
   model: string;
+  /** Two runtimes can serve the same model name and word the answer differently. */
+  runtime: string;
 }
 
 export async function queryCommand(positionals: string[], flags: GlobalFlags): Promise<number> {
@@ -50,7 +52,7 @@ export async function queryCommand(positionals: string[], flags: GlobalFlags): P
   const cached = flags.refresh ? null : cache.get<CachedQuery>(analysis.sha);
 
   let result: QueryResult;
-  if (cached !== null && cached.model === config.model) {
+  if (cached !== null && cached.model === config.model && cached.runtime === config.runtime) {
     result = {
       analysis,
       prose: cached.prose,
@@ -71,7 +73,7 @@ export async function queryCommand(positionals: string[], flags: GlobalFlags): P
     // The runtime is checked before any work is done, and a missing one is
     // fatal: the explanation is the product, and a run that quietly drops it
     // looks complete while being useless.
-    const runtime = new OllamaRuntime(config);
+    const runtime = createRuntime(config);
     result = await runQuery({
       snapshot: resolved.primary,
       base: resolved.base,
@@ -85,6 +87,7 @@ export async function queryCommand(positionals: string[], flags: GlobalFlags): P
       benchmarksUnreadable: result.benchmarksUnreadable,
       droppedClaims: result.droppedClaims,
       model: config.model,
+      runtime: config.runtime,
     });
   }
 

@@ -1,8 +1,8 @@
 import http from "node:http";
 import https from "node:https";
-import { RuntimeUnavailableError } from "../errors.ts";
+import { RuntimeUnavailableError, UsageError } from "../errors.ts";
 import { isRecord } from "../hf/client.ts";
-import type { CatalogConfig } from "../config.ts";
+import type { CatalogConfig, RuntimeName } from "../config.ts";
 
 export interface GenerateRequest {
   system: string;
@@ -24,7 +24,7 @@ export interface RuntimeStatus {
   problem: string | null;
 }
 
-/** What a runtime has to provide. Only ollama is implemented; the shape allows others. */
+/** What a runtime has to provide. */
 export interface LlmRuntime {
   readonly name: string;
   readonly model: string;
@@ -133,17 +133,13 @@ export class OllamaRuntime implements LlmRuntime {
       think: false,
     };
 
-    // Deliberately not fetch.
-    //
-    // Node's fetch abandons a request when response headers do not arrive
-    // within five minutes, and that limit cannot be raised through AbortSignal
-    // or any option fetch accepts. Streaming was not enough on its own: ollama
-    // sends no headers at all until it has finished loading the model, so a
-    // cold start on a slow machine still hit the limit and reported a working
-    // runtime as unreachable. node:http imposes no such deadline, which leaves
-    // the configured timeout as the only one.
     try {
-      return await postForStreamedText(`${this.endpoint}/api/generate`, body, this.timeoutMs);
+      return await postForStreamedText(
+        `${this.endpoint}/api/generate`,
+        body,
+        this.timeoutMs,
+        OLLAMA_STREAM,
+      );
     } catch (cause) {
       if (cause instanceof RuntimeUnavailableError) throw cause;
       if (cause instanceof Error && cause.name === "TimeoutError") throw this.timeoutError();
@@ -193,15 +189,363 @@ export class OllamaRuntime implements LlmRuntime {
 }
 
 /**
- * Posts JSON and reassembles a newline-delimited streamed reply.
+ * Runs the configured model through OpenRouter.
  *
- * ollama sends one JSON object per line, each carrying the next fragment. The
- * only deadline is `timeoutMs`, measured across the whole exchange.
+ * The trade against ollama is not speed, it is where the model card goes. A
+ * local runtime reads the card on this machine; this one posts it to a third
+ * party, which is why the runtime has to be asked for by name and is never
+ * fallen back to.
+ */
+export class OpenRouterRuntime implements LlmRuntime {
+  readonly name = "openrouter";
+  readonly model: string;
+  private readonly endpoint: string;
+  private readonly timeoutMs: number;
+  private readonly apiKey: string | null;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(config: CatalogConfig, fetchImpl: typeof fetch = fetch) {
+    this.model = config.model;
+    this.endpoint = config.runtimeEndpoint.replace(/\/$/, "");
+    this.timeoutMs = config.requestTimeoutMs;
+    this.apiKey = config.apiKey;
+    this.fetchImpl = fetchImpl;
+  }
+
+  async status(): Promise<RuntimeStatus> {
+    // The catalogue is public, so reachability and whether the model exists can
+    // both be settled before the key is ever needed. That keeps "your key is
+    // missing" and "that model does not exist" as separate answers.
+    const catalogue = await this.catalogue();
+    if (catalogue === null) {
+      return {
+        reachable: false,
+        modelPresent: false,
+        modelMaxContext: null,
+        version: null,
+        problem: `Nothing is answering at ${this.endpoint}.`,
+      };
+    }
+
+    const entry = catalogue.get(this.model);
+    if (entry === undefined) {
+      return {
+        reachable: true,
+        modelPresent: false,
+        modelMaxContext: null,
+        version: null,
+        problem: `OpenRouter has no model called "${this.model}".`,
+      };
+    }
+
+    return {
+      reachable: true,
+      modelPresent: true,
+      modelMaxContext: entry,
+      version: null,
+      problem: null,
+    };
+  }
+
+  async requireReady(): Promise<RuntimeStatus> {
+    if (this.apiKey === null) {
+      throw new RuntimeUnavailableError(
+        "OpenRouter needs an API key, and none is set. The plain-English explanation cannot be written without one.",
+        "Create a key at https://openrouter.ai/keys, then:\n  export OPENROUTER_API_KEY=sk-or-...\n\nThe key is read from the environment and never from the config file, so it does not end up in a file you might share.",
+      );
+    }
+
+    const status = await this.status();
+    if (!status.reachable) {
+      throw new RuntimeUnavailableError(
+        `${status.problem} The plain-English explanation needs a model runtime, so there is nothing useful to print without it.`,
+        "Check that this machine is online. To use a model on this machine instead:\n  CATALOG_RUNTIME=ollama catalog query <url>",
+      );
+    }
+    if (!status.modelPresent) {
+      throw new RuntimeUnavailableError(
+        `${status.problem} The plain-English explanation needs it.`,
+        `Pick one from https://openrouter.ai/models and name it in full, owner and all:\n  CATALOG_MODEL=deepseek/deepseek-v4-flash-0731`,
+      );
+    }
+    return status;
+  }
+
+  async generate(request: GenerateRequest): Promise<GeneratedReply> {
+    const body = {
+      model: this.model,
+      messages: [
+        { role: "system", content: request.system },
+        { role: "user", content: request.prompt },
+      ],
+      stream: true,
+      max_tokens: request.maxOutputTokens,
+      // The job is transcription of a card into fixed fields, not invention.
+      temperature: 0,
+      // Asked for, not relied on. Models that cannot do it have the parameter
+      // ignored rather than rejected, and the extraction pass already copes
+      // with prose wrapped around the JSON.
+      response_format: { type: "json_object" },
+    };
+
+    // Unlike ollama, the window is not ours to set: the context length belongs
+    // to the model as the provider serves it, and is read back in status().
+
+    try {
+      return await postForStreamedText(
+        `${this.endpoint}/chat/completions`,
+        body,
+        this.timeoutMs,
+        this.protocol(),
+      );
+    } catch (cause) {
+      if (cause instanceof RuntimeUnavailableError) throw cause;
+      if (cause instanceof Error && cause.name === "TimeoutError") {
+        const minutes = Math.round(this.timeoutMs / 60_000);
+        throw new RuntimeUnavailableError(
+          `${this.model} did not answer within ${minutes} minutes.`,
+          `Give it longer by raising "requestTimeoutMs" in the config file, or pick a faster model:\n  CATALOG_MODEL=<another model>`,
+        );
+      }
+      throw new RuntimeUnavailableError(
+        `Lost contact with OpenRouter at ${this.endpoint} while it was working.`,
+        "Check that this machine is online, then try again.",
+      );
+    }
+  }
+
+  /** Server-sent events: `data:` lines, comment lines, and a `[DONE]` sentinel. */
+  private protocol(): StreamProtocol {
+    const model = this.model;
+    return {
+      headers: {
+        Authorization: `Bearer ${this.apiKey ?? ""}`,
+        // Identifies the caller on OpenRouter's side. Not authentication.
+        "X-Title": "catalog",
+      },
+      readLine: readOpenRouterLine,
+      onHttpError: (status, body) => openRouterHttpError(status, body, model),
+      emptyReply: `${this.model} returned an empty reply through OpenRouter.`,
+    };
+  }
+
+  /** Model id to the context length OpenRouter serves it at. Public, no key needed. */
+  private async catalogue(): Promise<Map<string, number | null> | null> {
+    try {
+      const response = await this.fetchImpl(`${this.endpoint}/models`, {
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) return null;
+      const raw: unknown = await response.json();
+      if (!isRecord(raw) || !Array.isArray(raw["data"])) return null;
+      const models = new Map<string, number | null>();
+      for (const entry of raw["data"]) {
+        if (!isRecord(entry) || typeof entry["id"] !== "string") continue;
+        const context = entry["context_length"];
+        models.set(entry["id"], typeof context === "number" ? context : null);
+      }
+      return models;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Reads one line of an OpenRouter stream.
+ *
+ * Server-sent events, not ollama's one-object-per-line: fragments arrive as
+ * `delta.content` rather than `response`, and a stream can carry a failure after
+ * the headers already said 200, when a provider gives out partway through.
+ */
+export function readOpenRouterLine(line: string, sink: StreamSink): void {
+  // `: OPENROUTER PROCESSING` arrives while a provider is still thinking.
+  // Comments keep the connection open and carry no reply.
+  if (line.startsWith(":")) return;
+  if (!line.startsWith("data:")) return;
+  const payload = line.slice("data:".length).trim();
+  if (payload === "" || payload === "[DONE]") return;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return;
+  }
+  if (!isRecord(parsed)) return;
+
+  const error = parsed["error"];
+  if (isRecord(error) && typeof error["message"] === "string") {
+    sink.fail(new RuntimeUnavailableError(`OpenRouter reported: ${error["message"]}`));
+    return;
+  }
+
+  const choices = parsed["choices"];
+  if (!Array.isArray(choices)) return;
+  for (const choice of choices) {
+    if (!isRecord(choice)) continue;
+    const delta = choice["delta"];
+    if (isRecord(delta) && typeof delta["content"] === "string") sink.append(delta["content"]);
+    // Cut off at the output limit, which is a different problem from a model
+    // that wrote something malformed.
+    if (choice["finish_reason"] === "length") sink.markTruncated();
+  }
+}
+
+/**
+ * Turns a refusal into something the user can act on.
+ *
+ * The four cases are separated because the fix differs: a dead key, an empty
+ * balance and a rate limit all look identical as "it did not work", and only one
+ * of them is worth waiting out.
+ */
+export function openRouterHttpError(
+  status: number,
+  body: string,
+  model: string,
+): RuntimeUnavailableError {
+  const reported = messageFromErrorBody(body);
+  const detail = reported === null ? "" : ` It said: ${reported}`;
+  if (status === 401 || status === 403) {
+    return new RuntimeUnavailableError(
+      `OpenRouter rejected the API key.${detail}`,
+      "Check the key is current at https://openrouter.ai/keys, then:\n  export OPENROUTER_API_KEY=sk-or-...",
+    );
+  }
+  if (status === 402) {
+    return new RuntimeUnavailableError(
+      `This OpenRouter account cannot pay for ${model}.${detail}`,
+      "Add credit at https://openrouter.ai/credits, or pick a cheaper model with CATALOG_MODEL, or run it on this machine instead:\n  CATALOG_RUNTIME=ollama catalog query <url>",
+    );
+  }
+  if (status === 429) {
+    return new RuntimeUnavailableError(
+      `OpenRouter is rate limiting this key.${detail}`,
+      "Wait and try again, or run the model on this machine instead:\n  CATALOG_RUNTIME=ollama catalog query <url>",
+    );
+  }
+  return new RuntimeUnavailableError(
+    `OpenRouter replied ${status} when asked to generate.${detail}`,
+    `Check that ${model} is currently served at https://openrouter.ai/models`,
+  );
+}
+
+/** Pulls the human-readable reason out of an error body, when there is one. */
+function messageFromErrorBody(body: string): string | null {
+  if (body.trim() === "") return null;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (isRecord(parsed)) {
+      const error = parsed["error"];
+      if (isRecord(error) && typeof error["message"] === "string") return error["message"];
+      if (typeof parsed["message"] === "string") return parsed["message"];
+    }
+  } catch {
+    // Not JSON. A short plain-text body is still worth repeating.
+  }
+  const flat = body.replace(/\s+/g, " ").trim();
+  return flat.length > 200 ? `${flat.slice(0, 200)}...` : flat;
+}
+
+/**
+ * Builds the runtime the config asks for.
+ *
+ * An unknown name fails here rather than falling back to a working default: a
+ * typo that silently sends a model card to a different place than the one asked
+ * for is worse than a run that stops.
+ */
+export function createRuntime(config: CatalogConfig, fetchImpl: typeof fetch = fetch): LlmRuntime {
+  switch (config.runtime) {
+    case "ollama":
+      return new OllamaRuntime(config, fetchImpl);
+    case "openrouter":
+      return new OpenRouterRuntime(config, fetchImpl);
+    default:
+      throw new UsageError(
+        `There is no "${String(config.runtime)}" runtime.`,
+        `The runtimes this tool knows are:\n  ollama       a model running on this machine\n  openrouter   a model served over the network\n\nSet it with CATALOG_RUNTIME, or "runtime" in the config file.`,
+      );
+  }
+}
+
+/** Runtimes this build can talk to, for help text and error messages. */
+export const RUNTIME_NAMES: RuntimeName[] = ["ollama", "openrouter"];
+
+/** ollama writes one JSON object per line, each carrying the next fragment. */
+const OLLAMA_STREAM: StreamProtocol = {
+  readLine(line, sink) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      // A partial line at a chunk boundary is normal; the next chunk completes it.
+      return;
+    }
+    if (!isRecord(parsed)) return;
+    if (typeof parsed["error"] === "string") {
+      sink.fail(new RuntimeUnavailableError(`ollama reported: ${parsed["error"]}`));
+      return;
+    }
+    if (typeof parsed["response"] === "string") sink.append(parsed["response"]);
+    // The runtime says why it stopped. "length" means the reply was cut off at
+    // the output limit, which is a different problem from a model that wrote
+    // something malformed.
+    if (parsed["done_reason"] === "length") sink.markTruncated();
+  },
+  onHttpError(status) {
+    return new RuntimeUnavailableError(
+      `ollama replied ${status} when asked to generate.`,
+      `Check the model is usable with:\n  ollama run <model> "hello"`,
+    );
+  },
+  emptyReply: "ollama produced an empty reply.",
+};
+
+/** How much of a failed reply's body is worth quoting back at the user. */
+const ERROR_BODY_LIMIT = 2000;
+
+/** Where a streamed reply is assembled, one line at a time. */
+export interface StreamSink {
+  /** Adds the next fragment of the reply. */
+  append(text: string): void;
+  /** Records that the runtime stopped at the output limit rather than finishing. */
+  markTruncated(): void;
+  /** Records a failure the runtime reported inside the stream. */
+  fail(error: RuntimeUnavailableError): void;
+}
+
+/** How one runtime's stream differs from another's. The transport does not care. */
+export interface StreamProtocol {
+  headers?: Record<string, string>;
+  /** Reads one line of the response body into the sink. */
+  readLine(line: string, sink: StreamSink): void;
+  /** Turns a non-2xx reply into the error the user should see. */
+  onHttpError(status: number, body: string): RuntimeUnavailableError;
+  /** Said when the stream ended without a single fragment of reply. */
+  emptyReply: string;
+}
+
+/**
+ * Posts JSON and reassembles a streamed reply, line by line.
+ *
+ * Deliberately not fetch.
+ *
+ * Node's fetch abandons a request when response headers do not arrive within
+ * five minutes, and that limit cannot be raised through AbortSignal or any
+ * option fetch accepts. Streaming was not enough on its own: ollama sends no
+ * headers at all until it has finished loading the model, so a cold start on a
+ * slow machine still hit the limit and reported a working runtime as
+ * unreachable. node:http imposes no such deadline, which leaves the configured
+ * timeout as the only one.
+ *
+ * What counts as a line, and what a line means, belongs to the protocol: ollama
+ * writes one JSON object per line, OpenRouter writes server-sent events.
  */
 export function postForStreamedText(
   url: string,
   body: unknown,
   timeoutMs: number,
+  protocol: StreamProtocol,
 ): Promise<GeneratedReply> {
   const target = new URL(url);
   const transport = target.protocol === "https:" ? https : http;
@@ -232,50 +576,49 @@ export function postForStreamedText(
         headers: {
           "Content-Type": "application/json",
           "Content-Length": Buffer.byteLength(payload),
+          ...protocol.headers,
         },
       },
       (response) => {
+        response.setEncoding("utf8");
         const status = response.statusCode ?? 0;
+
         if (status < 200 || status >= 300) {
-          response.resume();
-          finish(() =>
-            reject(
-              new RuntimeUnavailableError(
-                `ollama replied ${status} when asked to generate.`,
-                `Check the model is usable with:\n  ollama run <model> "hello"`,
-              ),
-            ),
+          // The body of a refusal is where the reason lives: which model was
+          // rejected, or that the key is out of credit. Read enough of it to
+          // say so, and no more.
+          let detail = "";
+          response.on("data", (chunk: string) => {
+            if (detail.length < ERROR_BODY_LIMIT) detail += chunk;
+          });
+          response.on("end", () =>
+            finish(() => reject(protocol.onHttpError(status, detail.slice(0, ERROR_BODY_LIMIT)))),
           );
+          response.on("error", () => finish(() => reject(protocol.onHttpError(status, ""))));
           return;
         }
 
-        response.setEncoding("utf8");
         let buffer = "";
         let reply = "";
         let truncated = false;
         let failure: RuntimeUnavailableError | null = null;
 
+        const sink: StreamSink = {
+          append: (text) => {
+            reply += text;
+          },
+          markTruncated: () => {
+            truncated = true;
+          },
+          fail: (error) => {
+            failure = error;
+          },
+        };
+
         const consume = (line: string): void => {
           const text = line.trim();
           if (text === "") return;
-          let parsed: unknown;
-          try {
-            parsed = JSON.parse(text);
-          } catch {
-            // A partial line at a chunk boundary is normal; the next chunk
-            // completes it.
-            return;
-          }
-          if (!isRecord(parsed)) return;
-          if (typeof parsed["error"] === "string") {
-            failure = new RuntimeUnavailableError(`ollama reported: ${parsed["error"]}`);
-            return;
-          }
-          if (typeof parsed["response"] === "string") reply += parsed["response"];
-          // The runtime says why it stopped. "length" means the reply was cut
-          // off at the output limit, which is a different problem from a model
-          // that wrote something malformed.
-          if (parsed["done_reason"] === "length") truncated = true;
+          protocol.readLine(text, sink);
         };
 
         response.on("data", (chunk: string) => {
@@ -289,7 +632,7 @@ export function postForStreamedText(
           consume(buffer);
           finish(() => {
             if (failure !== null) reject(failure);
-            else if (reply === "") reject(new RuntimeUnavailableError("ollama produced an empty reply."));
+            else if (reply === "") reject(new RuntimeUnavailableError(protocol.emptyReply));
             else resolve({ text: reply, truncated });
           });
         });
