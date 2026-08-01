@@ -69,7 +69,11 @@ export function renderFit(analysis: Analysis, specs: MachineSpecs): string {
     ),
   );
   lines.push("");
-  lines.push(style.dim("  Memory here is exact arithmetic. For speed, run: catalog speed <url>"));
+  lines.push(
+    style.dim(
+      "  Memory here is exact arithmetic. Speed is not, so nothing above guesses at it.",
+    ),
+  );
   lines.push("");
   return lines.join("\n");
 }

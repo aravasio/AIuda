@@ -4,7 +4,7 @@ Paste a Hugging Face model link. Find out what the model does, and whether your
 machine can run it.
 
 ```
-catalog fit https://huggingface.co/Qwen/QwQ-32B
+catalog query https://huggingface.co/Qwen/QwQ-32B
 ```
 
 Everything is worked out from the repo itself. There is no hand-written catalog
@@ -33,7 +33,8 @@ an assumption, and can be changed with `runtimeOverheadBytes` in the config file
 
 | Command | What it does |
 |---|---|
-| `catalog fit <url>` | Whether this machine can run a model, with the arithmetic shown |
+| `catalog query <url>` | What the model takes in, gives back and is for, then whether this machine runs it |
+| `catalog fit <url>` | Whether this machine can run a model, with the arithmetic shown — no language model involved |
 | `catalog specs` | What the tool detected about this machine |
 | `catalog cache <list\|clear>` | The saved results |
 
