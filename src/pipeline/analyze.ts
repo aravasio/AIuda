@@ -279,12 +279,18 @@ function billions(params: number): string {
 /** How long a repo can sit untouched before its age is worth mentioning. */
 const STALE_AFTER_MONTHS = 12;
 
+/**
+ * Both dates are read in UTC, the timezone Hugging Face timestamps are stamped
+ * in. Reading them locally moves a repo touched on the first of a month into the
+ * month before it west of Greenwich, which ages the repo by one.
+ */
 function monthsSince(timestamp: string | null, now: Date = new Date()): number | null {
   if (timestamp === null) return null;
   const then = new Date(timestamp);
   if (Number.isNaN(then.getTime())) return null;
   const months =
-    (now.getFullYear() - then.getFullYear()) * 12 + (now.getMonth() - then.getMonth());
+    (now.getUTCFullYear() - then.getUTCFullYear()) * 12 +
+    (now.getUTCMonth() - then.getUTCMonth());
   return months < 0 ? 0 : months;
 }
 
@@ -294,8 +300,13 @@ function describeAge(months: number): string {
   return `over ${years} years ago`;
 }
 
+/** UTC for the same reason, so the month named matches the months counted. */
 function formatMonth(timestamp: string): string {
-  return new Date(timestamp).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return new Date(timestamp).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 export const __testing = { monthsSince, describeAge, STALE_AFTER_MONTHS };

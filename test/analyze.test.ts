@@ -150,6 +150,13 @@ describe("surfacing a model that has been sitting still", () => {
     expect(__testing.monthsSince("not a date")).toBeNull();
   });
 
+  it("counts in UTC, so the machine's timezone cannot age a repo by a month", () => {
+    // One hour either side of a month boundary. Read locally, the first case
+    // ages by a month west of Greenwich and the second east of it.
+    expect(__testing.monthsSince("2026-07-01T00:30:00.000Z", new Date("2026-07-31T00:00:00.000Z"))).toBe(0);
+    expect(__testing.monthsSince("2026-06-30T23:30:00.000Z", new Date("2026-07-01T01:00:00.000Z"))).toBe(1);
+  });
+
   it("says nothing about the age of a freshly updated repo", () => {
     const fresh = loadSnapshot("standard-dense");
     const recent = {
