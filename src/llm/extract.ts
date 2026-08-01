@@ -37,6 +37,20 @@ export interface ExtractOptions {
   contextTokens: number;
   maxOutputTokens: number;
   maxRetries: number;
+  /**
+   * Told when an attempt starts and as its reply arrives. A retry is most of
+   * the wait on a slow machine, so a caller showing progress has to be able to
+   * say that it is the second attempt rather than the first still running.
+   */
+  onProgress?: (event: ExtractProgress) => void;
+}
+
+export interface ExtractProgress {
+  attempt: number;
+  /** Attempts allowed in total, so a caller can say "2 of 3". */
+  ofAttempts: number;
+  /** Characters received so far in this attempt. */
+  characters: number;
 }
 
 /**
@@ -54,12 +68,25 @@ export async function extract<T>(
   const attempts: ExtractionAttempt[] = [];
   let prompt = options.prompt;
 
-  for (let attempt = 1; attempt <= options.maxRetries + 1; attempt += 1) {
+  const ofAttempts = options.maxRetries + 1;
+
+  for (let attempt = 1; attempt <= ofAttempts; attempt += 1) {
+    let characters = 0;
+    options.onProgress?.({ attempt, ofAttempts, characters });
+
     const request: GenerateRequest = {
       system: options.system,
       prompt,
       contextTokens: options.contextTokens,
       maxOutputTokens: options.maxOutputTokens,
+      ...(options.onProgress === undefined
+        ? {}
+        : {
+            onFragment: (text: string) => {
+              characters += text.length;
+              options.onProgress?.({ attempt, ofAttempts, characters });
+            },
+          }),
     };
     const { text: raw, truncated } = await runtime.generate(request);
 

@@ -5,6 +5,7 @@ import { HfClient } from "../../hf/client.ts";
 import { parseModelRef } from "../../hf/url.ts";
 import { analyze, type Analysis } from "../../pipeline/analyze.ts";
 import { resolveRepo } from "../../pipeline/resolve.ts";
+import { createProgress } from "../../render/progress.ts";
 import { renderFit } from "../../render/fit.ts";
 import { detectMachine } from "../../specs/detect.ts";
 import type { GlobalFlags } from "../args.ts";
@@ -29,7 +30,18 @@ export async function fitCommand(positionals: string[], flags: GlobalFlags): Pro
   const specs = detectMachine();
   const contextTokens = flags.context ?? config.defaultContextTokens;
 
-  const resolved = await resolveRepo(ref, client);
+  // No language model here, so the only wait is the network. It still deserves
+  // a name: a large repo's file listing is not instant.
+  const progress = createProgress({ json: flags.json });
+  let resolved;
+  try {
+    progress.start(`Reading ${ref.repoId}`);
+    resolved = await resolveRepo(ref, client);
+    progress.done(resolved.base === null ? "" : `and its base model, ${resolved.base.info.repoId}`);
+  } finally {
+    progress.stop();
+  }
+
   const analysis = analyze(resolved.primary, resolved.base, specs, {
     contextTokens,
     runtimeOverheadBytes: config.runtimeOverheadBytes,

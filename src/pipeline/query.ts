@@ -6,6 +6,8 @@ import { buildBenchmarkPrompt, buildProsePrompt, PROSE_SYSTEM_PROMPT, type Promp
 import { normaliseProse, type LabelledBenchmark, type Prose } from "../llm/schema.ts";
 import { estimateTokens, looksLikeScore, trimCard, type TrimResult } from "../llm/trim.ts";
 import { planContext, type ContextPlan, type LlmRuntime } from "../llm/runtime.ts";
+import { SILENT, type Progress } from "../render/progress.ts";
+import type { ExtractProgress } from "../llm/extract.ts";
 import type { Analysis } from "./analyze.ts";
 import { crossCheck, type DroppedClaim } from "./crosscheck.ts";
 
@@ -42,11 +44,15 @@ export async function runQuery(input: {
   analysis: Analysis;
   runtime: LlmRuntime;
   config: CatalogConfig;
+  progress?: Progress;
 }): Promise<QueryResult> {
   const { snapshot, base, analysis, runtime, config } = input;
+  const progress = input.progress ?? SILENT;
   const notes: string[] = [];
 
+  progress.start(`Checking ${runtime.name} is ready`);
   const status = await runtime.requireReady();
+  progress.done(runtime.model);
 
   // A quantisation's own card is usually download instructions. The description
   // belongs to the model it was made from.
@@ -94,6 +100,7 @@ export async function runQuery(input: {
     );
   }
 
+  progress.start("Writing the description");
   const prose = await extractProse(
     runtime,
     {
@@ -101,9 +108,11 @@ export async function runQuery(input: {
       contextTokens: plan.windowTokens,
       maxOutputTokens: config.responseTokenBudget,
       maxRetries: config.maxSchemaRetries,
+      onProgress: (event) => progress.detail(describeAttempt(event)),
     },
     trimmedProse.text,
   );
+  progress.done();
 
   if (prose.attempts.length > 1) {
     notes.push(
@@ -121,12 +130,14 @@ export async function runQuery(input: {
   if (unreadable !== null) notes.push(unreadable);
   let benchmarksCutOff = false;
   if (benchmarkTrim !== null) {
+    progress.start("Reading the benchmark tables");
     try {
       const extracted = await extractBenchmarks(runtime, {
         prompt: buildBenchmarkPrompt(benchmarkTrim.text, snapshot.info.repoId),
         contextTokens: plan.windowTokens,
         maxOutputTokens: config.benchmarkTokenBudget,
         maxRetries: config.maxSchemaRetries,
+        onProgress: (event) => progress.detail(describeAttempt(event)),
       });
       // A row whose score is not a number is not a benchmark, whatever the model
       // called it. Dropped by rule rather than retried: the deterministic side
@@ -142,16 +153,19 @@ export async function runQuery(input: {
           });
         }
       }
+      progress.done(`${cardBenchmarks.length} read`);
     } catch (error) {
       // The description is the product; the benchmark table is not. A card
       // whose results are too long to read should still get an explanation,
       // with the benchmarks honestly reported as unread rather than as absent.
       if (error instanceof TruncatedReplyError || error instanceof InvalidLlmOutputError) {
+        progress.fail();
         benchmarksCutOff = true;
         notes.push(
           `This card's benchmark table was too large to read in full, so no scores were taken from it. The description above is unaffected. Raise "benchmarkTokenBudget" in the config file to read more of it.`,
         );
       } else {
+        progress.fail();
         throw error;
       }
     }
@@ -166,7 +180,11 @@ export async function runQuery(input: {
     source: "model-index" as const,
   }));
 
+  progress.start("Checking every claim against the repository");
   const checked = crossCheck(normaliseProse(prose.value), analysis);
+  progress.done(
+    checked.dropped.length === 0 ? "all held up" : `${checked.dropped.length} dropped`,
+  );
 
   return {
     analysis,
@@ -192,6 +210,19 @@ export async function runQuery(input: {
 
 /** Roughly what the JSON shape instructions and framing cost, on top of the system prompt. */
 const PROMPT_SCAFFOLD_TOKENS = 400;
+
+/**
+ * What to show beside a running extraction.
+ *
+ * The attempt number matters more than the character count: a retry looks
+ * exactly like a slow first attempt from outside, and on a machine where one
+ * pass takes a minute, knowing it is the second explains the wait.
+ */
+function describeAttempt(event: ExtractProgress): string {
+  const written = event.characters === 0 ? "waiting for the first words" : `${event.characters} characters`;
+  if (event.attempt === 1) return written;
+  return `attempt ${event.attempt} of ${event.ofAttempts}, ${written}`;
+}
 
 function chooseCard(
   snapshot: RepoSnapshot,

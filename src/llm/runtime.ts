@@ -11,6 +11,12 @@ export interface GenerateRequest {
   maxOutputTokens: number;
   /** Size of the window to ask the runtime for. */
   contextTokens: number;
+  /**
+   * Called with each fragment as it arrives, so a caller can show that the
+   * reply is being written. The reply is already streamed; this only exposes
+   * what was arriving anyway.
+   */
+  onFragment?: (text: string) => void;
 }
 
 export interface RuntimeStatus {
@@ -139,6 +145,7 @@ export class OllamaRuntime implements LlmRuntime {
         body,
         this.timeoutMs,
         OLLAMA_STREAM,
+        request.onFragment,
       );
     } catch (cause) {
       if (cause instanceof RuntimeUnavailableError) throw cause;
@@ -297,6 +304,7 @@ export class OpenRouterRuntime implements LlmRuntime {
         body,
         this.timeoutMs,
         this.protocol(),
+        request.onFragment,
       );
     } catch (cause) {
       if (cause instanceof RuntimeUnavailableError) throw cause;
@@ -546,6 +554,7 @@ export function postForStreamedText(
   body: unknown,
   timeoutMs: number,
   protocol: StreamProtocol,
+  onFragment?: (text: string) => void,
 ): Promise<GeneratedReply> {
   const target = new URL(url);
   const transport = target.protocol === "https:" ? https : http;
@@ -606,6 +615,7 @@ export function postForStreamedText(
         const sink: StreamSink = {
           append: (text) => {
             reply += text;
+            onFragment?.(text);
           },
           markTruncated: () => {
             truncated = true;

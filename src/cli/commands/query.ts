@@ -7,6 +7,7 @@ import { createRuntime } from "../../llm/runtime.ts";
 import { analyze } from "../../pipeline/analyze.ts";
 import { runQuery, type QueryResult } from "../../pipeline/query.ts";
 import { resolveRepo } from "../../pipeline/resolve.ts";
+import { createProgress } from "../../render/progress.ts";
 import { renderQuery } from "../../render/query.ts";
 import { detectMachine } from "../../specs/detect.ts";
 import type { GlobalFlags } from "../args.ts";
@@ -41,63 +42,74 @@ export async function queryCommand(positionals: string[], flags: GlobalFlags): P
   const specs = detectMachine();
   const contextTokens = flags.context ?? config.defaultContextTokens;
 
-  const resolved = await resolveRepo(ref, client);
-  const analysis = analyze(resolved.primary, resolved.base, specs, {
-    contextTokens,
-    runtimeOverheadBytes: config.runtimeOverheadBytes,
-  });
-  if (resolved.baseError !== null) analysis.notes.push(resolved.baseError);
-
-  const cache = new RevisionCache();
-  const cached = flags.refresh ? null : cache.get<CachedQuery>(analysis.sha);
-
-  let result: QueryResult;
-  if (cached !== null && cached.model === config.model && cached.runtime === config.runtime) {
-    result = {
-      analysis,
-      prose: cached.prose,
-      benchmarks: cached.benchmarks,
-      benchmarksUnreadable: cached.benchmarksUnreadable,
-      droppedClaims: cached.droppedClaims,
-      trimming: { prose: { tokens: 0, budgetTokens: 0, dropped: [] }, benchmarks: null },
-      contextPlan: {
-        windowTokens: config.llmContextTokens,
-        outputTokens: config.responseTokenBudget,
-        overheadTokens: 0,
-        cardBudgetTokens: 0,
-        cappedByModel: false,
-      },
-      notes: ["Read from the saved result for this exact revision of the repository."],
-    };
-  } else {
-    // The runtime is checked before any work is done, and a missing one is
-    // fatal: the explanation is the product, and a run that quietly drops it
-    // looks complete while being useless.
-    const runtime = createRuntime(config);
-    result = await runQuery({
-      snapshot: resolved.primary,
-      base: resolved.base,
-      analysis,
-      runtime,
-      config,
+  // Everything from here can be slow enough to look like a hang: a repo fetch,
+  // then several passes of a language model. Each phase is named as it runs, and
+  // the terminal is handed back however the run ends.
+  const progress = createProgress({ json: flags.json });
+  try {
+    progress.start(`Reading ${ref.repoId}`);
+    const resolved = await resolveRepo(ref, client);
+    const analysis = analyze(resolved.primary, resolved.base, specs, {
+      contextTokens,
+      runtimeOverheadBytes: config.runtimeOverheadBytes,
     });
-    cache.set<CachedQuery>(analysis.sha, analysis.repoId, {
-      prose: result.prose,
-      benchmarks: result.benchmarks,
-      benchmarksUnreadable: result.benchmarksUnreadable,
-      droppedClaims: result.droppedClaims,
-      model: config.model,
-      runtime: config.runtime,
-    });
-  }
+    progress.done(resolved.base === null ? "" : `and its base model, ${resolved.base.info.repoId}`);
+    if (resolved.baseError !== null) analysis.notes.push(resolved.baseError);
 
-  analysis.notes.push(...result.notes);
+    const cache = new RevisionCache();
+    const cached = flags.refresh ? null : cache.get<CachedQuery>(analysis.sha);
 
-  if (flags.json) {
-    process.stdout.write(`${JSON.stringify({ ...result, machine: specs }, null, 2)}\n`);
+    let result: QueryResult;
+    if (cached !== null && cached.model === config.model && cached.runtime === config.runtime) {
+      result = {
+        analysis,
+        prose: cached.prose,
+        benchmarks: cached.benchmarks,
+        benchmarksUnreadable: cached.benchmarksUnreadable,
+        droppedClaims: cached.droppedClaims,
+        trimming: { prose: { tokens: 0, budgetTokens: 0, dropped: [] }, benchmarks: null },
+        contextPlan: {
+          windowTokens: config.llmContextTokens,
+          outputTokens: config.responseTokenBudget,
+          overheadTokens: 0,
+          cardBudgetTokens: 0,
+          cappedByModel: false,
+        },
+        notes: ["Read from the saved result for this exact revision of the repository."],
+      };
+    } else {
+      // The runtime is checked before any work is done, and a missing one is
+      // fatal: the explanation is the product, and a run that quietly drops it
+      // looks complete while being useless.
+      const runtime = createRuntime(config);
+      result = await runQuery({
+        snapshot: resolved.primary,
+        base: resolved.base,
+        analysis,
+        runtime,
+        config,
+        progress,
+      });
+      cache.set<CachedQuery>(analysis.sha, analysis.repoId, {
+        prose: result.prose,
+        benchmarks: result.benchmarks,
+        benchmarksUnreadable: result.benchmarksUnreadable,
+        droppedClaims: result.droppedClaims,
+        model: config.model,
+        runtime: config.runtime,
+      });
+    }
+
+    analysis.notes.push(...result.notes);
+
+    if (flags.json) {
+      process.stdout.write(`${JSON.stringify({ ...result, machine: specs }, null, 2)}\n`);
+      return 0;
+    }
+
+    process.stdout.write(renderQuery(result, specs, { technical: flags.technical }));
     return 0;
+  } finally {
+    progress.stop();
   }
-
-  process.stdout.write(renderQuery(result, specs, { technical: flags.technical }));
-  return 0;
 }
