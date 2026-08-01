@@ -4,7 +4,7 @@
   "description": "Paste a Hugging Face model URL, get a plain-English answer about what the model does and whether your machine runs it",
   "type": "module",
   "bin": {
-    "catalog": "./dist/cli/index.js"
+    "catalog": "./dist/src/cli/index.js"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { CatalogError, ExitCode } from "../errors.ts";
 import { colorSupported, setColorEnabled, style } from "../render/format.ts";
 import { nearestMatch, parseArgs } from "./args.ts";
@@ -71,9 +73,25 @@ function report(error: unknown): number {
   return ExitCode.Generic;
 }
 
-const invokedDirectly =
-  process.argv[1] !== undefined &&
-  (process.argv[1].endsWith("cli/index.ts") || process.argv[1].endsWith("cli/index.js"));
+/**
+ * True when this file is the program, rather than something a test imported.
+ *
+ * Compared by resolved path rather than by filename: an installed `catalog` is a
+ * symlink in a bin directory, so argv[1] is the link's own name and no filename
+ * test can recognise it. Following the link is what makes the installed command
+ * behave like the one run out of the source tree.
+ */
+function isInvokedDirectly(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  try {
+    return realpathSync(entry) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+const invokedDirectly = isInvokedDirectly();
 
 if (invokedDirectly) {
   main(process.argv.slice(2))

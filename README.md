@@ -29,6 +29,26 @@ The runtime allowance is an assumption rather than a measurement, and it is the
 least certain number in the calculation. It is printed on its own line, named as
 an assumption, and can be changed with `runtimeOverheadBytes` in the config file.
 
+## Installing
+
+```
+npm install
+npm run build
+npm link        # puts `catalog` on the PATH, runnable from anywhere
+```
+
+`catalog query` also needs a language model to write the prose with. It talks to
+an ollama already installed on the machine, and never installs or downloads one
+itself:
+
+```
+ollama pull qwen3:8b
+```
+
+Any model you already have works instead — name it with `CATALOG_MODEL` or the
+`model` setting in the config file. `catalog fit`, `specs` and `cache` involve no
+language model and need none of this.
+
 ## Commands
 
 | Command | What it does |
