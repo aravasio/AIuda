@@ -5,9 +5,11 @@ import { CatalogError, ExitCode } from "../errors.ts";
 import { colorSupported, setColorEnabled, style } from "../render/format.ts";
 import { nearestMatch, parseArgs } from "./args.ts";
 import { cacheCommand } from "./commands/cache.ts";
+import { discoverCommand } from "./commands/discover.ts";
 import { fitCommand } from "./commands/fit.ts";
 import { queryCommand } from "./commands/query.ts";
 import { specsCommand } from "./commands/specs.ts";
+import { teamCommand } from "./commands/team.ts";
 import { COMMANDS, findCommandHelp, renderCommandHelp, renderMainHelp } from "./help.ts";
 
 const VERSION = "0.1.0";
@@ -41,8 +43,12 @@ export async function main(argv: string[]): Promise<number> {
       return await queryCommand(parsed.positionals, parsed.flags);
     case "fit":
       return await fitCommand(parsed.positionals, parsed.flags);
+    case "discover":
+      return await discoverCommand(parsed.positionals, parsed.flags);
     case "specs":
       return specsCommand(parsed.positionals, parsed.flags);
+    case "team":
+      return teamCommand();
     case "cache":
       return cacheCommand(parsed.positionals, parsed.flags);
     default: {
