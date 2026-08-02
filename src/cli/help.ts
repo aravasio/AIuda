@@ -58,6 +58,23 @@ export const COMMANDS: CommandHelp[] = [
     ],
   },
   {
+    name: "discover",
+    summary: "Find out which models from a curated catalog run on this machine",
+    usage: "catalog discover",
+    details: [
+      "Scans a curated list of notable open-weight models and checks each one",
+      "against your machine's memory. Outputs a ranked team recommendation",
+      "grouped by size — light, medium, heavy — so you know what to pull.",
+      "",
+      "No network needed: sizes are pre-computed from known quantisations.",
+      "Benchmarks and notes are from each model's official release.",
+    ],
+    flags: [
+      { flag: "--context <n>", description: "Assume n tokens of context when working out memory." },
+      { flag: "--json", description: "Print the result as JSON instead of text." },
+    ],
+  },
+  {
     name: "specs",
     summary: "Show what the tool detected about this machine",
     usage: "catalog specs",
@@ -67,6 +84,16 @@ export const COMMANDS: CommandHelp[] = [
       "as unknown, with the path of the file where you can fill it in by hand.",
     ],
     flags: [{ flag: "--json", description: "Print the result as JSON instead of text." }],
+  },
+  {
+    name: "team",
+    summary: "Show your AIuda team cheat sheet (which model when)",
+    usage: "catalog team",
+    details: [
+      "Reads ~/.config/aiuda/team.json and prints your curated model",
+      "recommendations. Edit that file to add or remove models over time.",
+    ],
+    flags: [],
   },
   {
     name: "cache",
